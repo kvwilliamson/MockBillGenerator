@@ -1,0 +1,6 @@
+node_modules/
+.env
+.DS_Store
+*.log
+# Do not ignore generated bills in the local classification/error-detection folders if they exist
+# but generally the focus is the source code.

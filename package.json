@@ -1,0 +1,26 @@
+{
+    "name": "mock-bill-generator",
+    "version": "1.0.0",
+    "description": "Standalone BKM Mock Bill Generator Tool",
+    "type": "module",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "concurrently \"npm run server\" \"npm run client\"",
+        "server": "node --watch server.js",
+        "client": "cd client && npm run dev",
+        "generate:classification": "node generate-classification-tests.mjs",
+        "generate:error-detection": "node generate-error-detection-bills.mjs"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "body-parser": "^1.20.2",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "puppeteer": "^22.0.0"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}
