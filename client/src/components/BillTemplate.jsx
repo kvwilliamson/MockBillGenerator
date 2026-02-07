@@ -97,17 +97,23 @@ export const BillTemplate = ({ data }) => {
             {/* Header - Dynamic Layout */}
             {theme.headerStyle === 'centered' ? (
                 <div style={{ textAlign: 'center', borderBottom: `4px double ${theme.primaryColor}`, paddingBottom: '20px', marginBottom: '20px' }}>
-                    <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '28px', textTransform: 'uppercase' }}>{provider}</h1>
-                    <p style={{ margin: '5px 0' }}>123 Medical Center Drive, Healthcare City, ST 12345</p>
+                    <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '28px', textTransform: 'uppercase' }}>
+                        {typeof provider === 'object' ? provider.name : provider}
+                    </h1>
+                    <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
+                    {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>Contact: {provider.contact}</p>}
                     <p style={{ margin: '5px 0' }}>NPI: {npi} | Tax ID: {taxId}</p>
                     <h2 style={{ marginTop: '15px', fontSize: '18px', background: '#eee', display: 'inline-block', padding: '5px 20px' }}>PATIENT STATEMENT</h2>
                 </div>
             ) : (
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `3px solid ${theme.primaryColor}`, paddingBottom: '10px', marginBottom: '20px' }}>
                     <div className="hospital-info">
-                        <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '24px' }}>{provider}</h1>
+                        <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '24px' }}>
+                            {typeof provider === 'object' ? provider.name : provider}
+                        </h1>
                         <p style={{ margin: '5px 0' }}>NPI: {npi} | Tax ID: {taxId}</p>
-                        <p style={{ margin: '5px 0' }}>123 Medical Center Drive, Healthcare City, ST 12345</p>
+                        <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
+                        {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>Customer Service: {provider.contact}</p>}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <h2 style={{ margin: 0, color: theme.id === 'urgent' ? theme.primaryColor : '#333' }}>PATIENT STATEMENT</h2>
@@ -265,6 +271,17 @@ export const BillTemplate = ({ data }) => {
                 <br />
                 <strong>FINANCIAL ASSISTANCE:</strong> You may be eligible for financial assistance or charity care under the No Surprises Act.
                 Contact us at 1-800-555-0199 or visit www.mgh-pay.com/assist for a summary of your rights.
+                {data.disclaimers && Array.isArray(data.disclaimers) ? (
+                    <div style={{ marginTop: '10px' }}>
+                        {data.disclaimers.map((d, i) => <div key={i}>{d}</div>)}
+                    </div>
+                ) : (
+                    typeof provider === 'object' && provider.disclaimers && Array.isArray(provider.disclaimers) && (
+                        <div style={{ marginTop: '10px' }}>
+                            {provider.disclaimers.map((d, i) => <div key={i}>{d}</div>)}
+                        </div>
+                    )
+                )}
                 {data.footerNote && (
                     <div style={{ marginTop: '10px', fontStyle: 'italic' }}>
                         {data.footerNote}

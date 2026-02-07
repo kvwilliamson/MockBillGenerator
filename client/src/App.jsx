@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { BillTemplate } from './components/BillTemplate';
 import { GFETemplate } from './components/GFETemplate';
 import { MedicalRecordTemplate } from './components/MedicalRecordTemplate';
-import { Loader2, Download, AlertTriangle } from 'lucide-react';
+import { Loader2, Download, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 function App() {
     // --- CONSTRAINTS ---
@@ -59,6 +59,8 @@ function App() {
     const [gfeData, setGfeData] = useState(null);
     const [mrData, setMrData] = useState(null);
     const [analysisData, setAnalysisData] = useState(null);
+    const [deepDiveData, setDeepDiveData] = useState(null);
+    const [supplementalData, setSupplementalData] = useState(null);
     const [viewMode, setViewMode] = useState('BILL'); // 'BILL', 'GFE', 'MR'
     const [error, setError] = useState(null);
 
@@ -70,6 +72,8 @@ function App() {
         setGfeData(null);
         setMrData(null);
         setAnalysisData(null);
+        setDeepDiveData(null);
+        setSupplementalData(null);
         setViewMode('BILL');
         try {
             // Connect to standalone backend
@@ -103,6 +107,8 @@ function App() {
         setGfeData(null);
         setMrData(null);
         setAnalysisData(null);
+        setDeepDiveData(null);
+        setSupplementalData(null);
         setViewMode('BILL');
         try {
             const response = await axios.post('http://localhost:4000/generate-data-v2', {
@@ -154,6 +160,41 @@ function App() {
         }
     };
 
+    const handleDeepDive = async () => {
+        if (!generatedData) return null;
+        try {
+            const response = await axios.post('http://localhost:4000/deep-dive-analysis', {
+                bill_data: generatedData.bill_data,
+                specialty,
+                errorType,
+                complexity,
+                payerType,
+                gfe_data: gfeData,
+                mr_data: mrData
+            });
+            console.log("Deep Dive Response:", response.data);
+            setDeepDiveData(response.data);
+            return response.data;
+        } catch (err) {
+            console.error("Deep Dive Error:", err);
+            return null;
+        }
+    };
+
+    const handleSupplementalAudit = async (existingIssues) => {
+        if (!generatedData) return;
+        try {
+            const response = await axios.post('http://localhost:4000/supplemental-audit', {
+                bill_data: generatedData.bill_data,
+                existing_issues: existingIssues || []
+            });
+            console.log("Supplemental Response:", response.data);
+            setSupplementalData(response.data);
+        } catch (err) {
+            console.error("Supplemental Audit Error:", err);
+        }
+    };
+
     const handleVerifyBill = async () => {
         if (!generatedData) return;
         setLoading(true);
@@ -167,11 +208,92 @@ function App() {
             });
             console.log("Analysis Response:", response.data);
             setAnalysisData(response.data);
+
+            // Trigger deep dive
+            const forensicResults = await handleDeepDive();
+
+            // Trigger supplemental audit
+            if (forensicResults) {
+                await handleSupplementalAudit(forensicResults.other_issues);
+            }
         } catch (err) {
             alert("Failed to verify bill: " + err.message);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCopyHardeningData = () => {
+        if (!generatedData) return;
+
+        const hardeningPrompt = `
+### 🛠️ FAIRMEDBILL GENERATOR HARDENING REPORT
+**OBJECTIVE**: Create the most realistic mock bill possible for the selections made, specifically for the error requested. Identify logic gaps ONLY if the generator failed to meet this high standard of realism and clinical accuracy.
+
+#### 1. INPUT PARAMETERS
+- Specialty: ${specialty}
+- Complexity: ${complexity}
+- Payer: ${payerType}
+- Intended Error: ${errorType}
+
+#### 2. INTERNAL AGENT REASONING (The "Truths")
+${JSON.stringify(generatedData.simulation_debug || generatedData.ground_truth, null, 2)}
+
+#### 3. GENERATED RAW BILL
+${JSON.stringify(generatedData.bill_data, null, 2)}
+
+#### 4. DISCREPANCY MATRIX (Intent vs. Result)
+- Clinical Level (Truth): ${generatedData?.simulation_debug?.clinical_truth?.expected_service_level || "Unknown"}
+- Billed Level (Actual): ${generatedData?.bill_data?.lineItems?.[0]?.code || "Unknown"}
+- Realistic Score: ${deepDiveData?.realism_score || "N/A"}%
+- AI Fingerprints: ${JSON.stringify(deepDiveData?.ai_fingerprints || [], null, 2)}
+- Detection Status: ${deepDiveData?.other_issues?.some(i => i.type.toUpperCase().includes(errorType.toUpperCase()) || i.explanation.toUpperCase().includes(errorType.toUpperCase()) || i.guardian.toUpperCase().includes("UPCODING")) ? "✅ SUCCESS: Audit Detected Error" : "❌ FAIL: Audit Missed Error"}
+
+#### 5. FORENSIC AUDIT VERDICT
+- Gemini Overview: ${analysisData?.analysis?.explanation || "No overview available"}
+- Forensic Issues Found: ${JSON.stringify(deepDiveData?.other_issues || [], null, 2)}
+- Compliance Findings: ${JSON.stringify(supplementalData?.supplemental_findings || [], null, 2)}
+
+#### 6. THE CHALLENGE (NOTE: IF THE BILL IS ALREADY VERY GOOD, DO NOTHING)
+Analyze the discrepancy between the Intent and the Audit. If the generator produced a highly realistic bill that correctly triggered the forensic findings without unintended "AI tells" or logic gaps, then **DO NOTHING**.
+
+Otherwise, look specifically for:
+- AI Laziness (Lazy coding, reused prices)
+- Logic Gaps (Audit finding errors that weren't intended)
+- Consistency Breaks (Dates/Math mismatches)
+
+Please propose specific code or prompt hardenings to resolve these issues.
+
+#### 7. 🚨 BKM CODING PRINCIPLES (MANDATORY FOR ALL FIXES)
+When proposing fixes, you MUST adhere to these Best Known Methods:
+
+**PRICING METHODOLOGY**:
+1. **NO HARDCODED BENCHMARKS**: Never add static price tables or Medicare rate constants. These become outdated and can't cover all specialties.
+2. **DYNAMIC MEDICARE LOOKUP**: Ask the AI to look up ONLY the Medicare rate. Do NOT let the AI calculate the final price.
+3. **DETERMINISTIC PRICE CALCULATION**: The final price MUST be calculated in CODE (not AI) using:
+   - **Self-Pay**: \`medicareRate × (1.25 + random(0.15))\` → Results in 1.25x-1.40x Medicare (safety margin under 1.5x)
+   - **Insured**: \`medicareRate × (2.0 + random(0.8))\` → Results in 2.0x-2.8x Medicare
+4. **NEVER LET AI SET PRICES**: When asked for prices, AI will lie about Medicare rates to justify inflated prices. Calculate price in code.
+5. **NEVER USE "CHARGEMASTER" TERMINOLOGY**: The word "chargemaster" triggers AI hallucinations.
+
+**ARCHITECTURE** (server.js \`generateItemPrice\`):
+\`\`\`javascript
+// AI ONLY looks up Medicare rate
+const medicareRate = await askAI("What is the Medicare rate for code X?");
+// Price is calculated DETERMINISTICALLY in code
+const multiplier = isSelfPay ? (1.30 + Math.random() * 0.15) : (2.0 + Math.random() * 0.8);
+const finalPrice = medicareRate * multiplier;
+\`\`\`
+
+**ANTI-PATTERNS TO AVOID**:
+- ❌ Asking AI to calculate or return \`unitPrice\` (it will lie)
+- ❌ Adding static lookup tables (e.g., \`MEDICAL_BENCHMARKS = {...}\`)
+- ❌ Asking for "chargemaster" or "hospital list price"
+- ❌ Setting multipliers above 1.5x for Self-Pay (auditor will flag it)
+- ❌ Providing example prices in prompts (AI will anchor to them)
+`;
+        navigator.clipboard.writeText(hardeningPrompt);
+        alert("✅ AI Hardening Report copied to clipboard! Paste it back to Antigravity to improve the generator.");
     };
 
     const handleQuickLoad = () => {
@@ -538,6 +660,14 @@ Generated by FairMedBill Mock Gen V2.7
                                     <Download size={12} />
                                     Download Report
                                 </button>
+                                <button
+                                    onClick={handleCopyHardeningData}
+                                    className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold hover:bg-indigo-700 flex items-center gap-1 transition-colors shadow-sm"
+                                    title="Copy AI Hardening Report to clipboard"
+                                >
+                                    <ShieldAlert size={12} />
+                                    Harden Generator
+                                </button>
                             </h3>
                             <div className="space-y-3 text-sm">
                                 <div className="flex justify-between items-center border-b border-indigo-200 pb-2">
@@ -560,16 +690,83 @@ Generated by FairMedBill Mock Gen V2.7
                                         {analysisData.analysis.explanation}
                                     </p>
                                 </div>
+                                {deepDiveData?.executive_summary && (
+                                    <div className="bg-slate-50 border border-slate-200 p-2.5 rounded shadow-sm">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Executive Summary</span>
+                                            {deepDiveData.health_score !== undefined && (
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase">Health Score</span>
+                                                    <span className={`text-sm font-black ${deepDiveData.health_score > 80 ? 'text-green-600' : deepDiveData.health_score > 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                        {deepDiveData.health_score}%
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-700 italic leading-relaxed">"{deepDiveData.executive_summary}"</p>
+                                    </div>
+                                )}
+
                                 <div>
-                                    <span className="text-indigo-600 font-medium block mb-1">Other Issues:</span>
-                                    {analysisData.analysis.other_errors_found && analysisData.analysis.other_errors_found.length > 0 ? (
-                                        <ul className="list-disc pl-4 text-indigo-800 text-xs text-red-600 font-bold">
-                                            {analysisData.analysis.other_errors_found.map((err, i) => (
-                                                <li key={i}>{err}</li>
+                                    <span className="text-indigo-600 font-bold text-xs block mb-1.5 flex items-center gap-1">
+                                        🛡️ Forensic Overcharge Audit
+                                    </span>
+                                    {deepDiveData?.other_issues && deepDiveData.other_issues.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {deepDiveData.other_issues.map((err, i) => (
+                                                <div key={i} className={`p-2 rounded border text-xs ${err.severity === 'High' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                                                    <div className="font-bold flex justify-between mb-1">
+                                                        <span className="flex items-center gap-1">
+                                                            <span className="text-slate-400 font-normal mr-1">[{err.guardian}]</span> {err.type}
+                                                        </span>
+                                                        <span className={`px-1 rounded text-[10px] uppercase ${err.severity === 'High' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>{err.severity}</span>
+                                                    </div>
+                                                    <p className="text-slate-700 leading-tight mb-2 italic">"{err.explanation}"</p>
+                                                    {err.overcharge_potential && (
+                                                        <div className="bg-white/50 p-1.5 rounded border border-white/50 text-[10px] flex justify-between items-center">
+                                                            <span className="text-slate-500 font-bold uppercase tracking-tight">Est. Overcharge:</span>
+                                                            <span className="text-red-600 font-black">{err.overcharge_potential}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             ))}
-                                        </ul>
+                                        </div>
+                                    ) : (loading && analysisData) ? (
+                                        <p className="text-xs text-indigo-500 italic animate-pulse flex items-center gap-2">
+                                            <Loader2 size={12} className="animate-spin" />
+                                            Scanning for forensic overcharges...
+                                        </p>
                                     ) : (
-                                        <p className="text-xs text-slate-500 italic">None detected.</p>
+                                        <p className="text-xs text-slate-500 italic px-2">No evidence-based overcharges detected.</p>
+                                    )}
+                                </div>
+
+                                {/* SUPPLEMENTAL FINDINGS */}
+                                <div>
+                                    <span className="text-slate-600 font-bold text-xs block mb-1.5 flex items-center gap-1">
+                                        📋 Compliance & Admin Supplemental Audit
+                                    </span>
+                                    {supplementalData?.supplemental_findings && supplementalData.supplemental_findings.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {supplementalData.supplemental_findings.map((f, i) => (
+                                                <div key={i} className="p-2 rounded border border-slate-200 bg-slate-50 text-xs">
+                                                    <div className="font-bold flex justify-between mb-1">
+                                                        <span className="flex items-center gap-1">
+                                                            ⚙️ <span className="text-slate-400 font-normal mr-1">[{f.category}]</span> {f.issue}
+                                                        </span>
+                                                        <span className="px-1 bg-slate-200 text-slate-600 rounded text-[10px] uppercase font-bold">{f.severity}</span>
+                                                    </div>
+                                                    <p className="text-slate-600 leading-tight mb-1 italic">"{f.impact}"</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (loading && deepDiveData) ? (
+                                        <p className="text-xs text-slate-400 italic animate-pulse flex items-center gap-2">
+                                            <Loader2 size={12} className="animate-spin" />
+                                            Checking compliance sentinel...
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-slate-400 italic px-2">No supplemental compliance issues found.</p>
                                     )}
                                 </div>
                             </div>
