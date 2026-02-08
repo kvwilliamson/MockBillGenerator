@@ -1134,9 +1134,12 @@ async function generateFinancialClerk(codingTruth, payerType, errorType = 'CLEAN
 
     // 4. THE GRAND TOTAL TRAP (The "Sabotage")
     let grandTotal;
-    if (isBalanceMismatch) {
-        // SABOTAGE: "Forget" to subtract adjustments and insurance payments.
-        // mimicking a billing software glitch where the patient is asked for the GROSS total.
+    if (errorType === "MATH_ERROR") {
+        // HARD SABOTAGE: Intentionally add a random discrepancy between $10 and $50
+        const discrepancy = 10 + Math.random() * 40;
+        grandTotal = parseFloat((subtotal - adjustments - insPaidRaw + discrepancy).toFixed(2));
+    } else if (errorType === "BALANCE_MISMATCH") {
+        // "Forget" to subtract adjustments and insurance payments.
         grandTotal = parseFloat(subtotal.toFixed(2));
     } else {
         // HONEST MATH
