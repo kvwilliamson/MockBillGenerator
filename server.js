@@ -728,18 +728,28 @@ async function supplementalAudit(billData, existingIssues) {
 
 // HELPER: Deterministic Revenue Codes
 // HELPER: Deterministic Revenue Codes
-function assignRevenueCode(cpt) {
-    const code = String(cpt);
-    if (code.startsWith('9928')) return "0450"; // ER - Emergency Room
-    if (code.startsWith('9920') || code.startsWith('9921')) return "0510"; // Clinic
+function assignRevenueCode(cpt, facilityType = 'Clinic') {
+    const code = String(cpt).split('-')[0]; // Strip modifiers for rev-code mapping
+    const isHospital = facilityType && (facilityType.includes('Hospital') || facilityType.includes('Emergency') || facilityType.includes('ER'));
+
+    // Facility Setting Priority
+    if (code.startsWith('9928')) return "0450"; // Emergency Room
+    if (code.startsWith('9920') || code.startsWith('9921')) return "0510"; // Clinic/Office
     if (code.startsWith('9922') || code.startsWith('9923')) return "0110"; // Inpatient (Room)
+
+    // Service Categorization
     if (code.startsWith('7')) return "0320"; // Radiology
     if (code.startsWith('8')) return "0300"; // Lab
     if (code.startsWith('93')) return "0730"; // EKG/ECG
     if (code.startsWith('9900')) return "0300"; // Lab Handling
     if (code.startsWith('9636') || code.startsWith('9637')) return "0260"; // IV Therapy / Injections
     if (code.startsWith('J') || code.startsWith('90')) return "0636"; // Drugs / Pharmacy
-    if (code.startsWith('1') || code.startsWith('2') || code.startsWith('3') || code.startsWith('4') || code.startsWith('5') || code.startsWith('6')) return "0450"; // Procedures (ER)
+
+    // Procedures (Surgery/Ortho/etc)
+    if (code.match(/^[1-6]/)) {
+        return isHospital ? "0450" : "0510"; // If in hospital/ER use ER rev code, else clinic
+    }
+
     return "0250"; // Gen Pharmacy/Supply
 }
 
@@ -876,13 +886,16 @@ async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
 
     // I. CONDITIONAL PROMPTING (BKM: Prevent Instruction Leakage)
     const villainLogics = {
-        'CLEAN': "Produce a PERFECT, CPC-compliant bill with ZERO errors. Adhere strictly to the Architect's truth and metadata.primary_anatomical_side.",
-        'UPCODING': 'GASLIGHTING: Ignore the "Low" Complexity level. Exaggerate a single Vital Sign (e.g., if HR is 90, claim "Tachycardia requiring stabilization") to justify a 99284 or 99285.',
+        'CLEAN': "Produce a PERFECT, CPC-compliant bill with ZERO errors. Adhere strictly to the Architect's truth and metadata.",
+        'UPCODING': 'GASLIGHTING: Ignore the "Low" Complexity level. Exaggerate a single Vital Sign or Symptom to justify a Level 4 or Level 5 E/M service appropriate for the setting (e.g., if at a Clinic, use 99204/99214).',
         'RECORD_MISMATCH': 'LATERALITY FLIP: Intentionally override the Architect\'s metadata.primary_anatomical_side. If the record says "Left", you must code for "Right" in the CPT description.',
         'GLOBAL_PERIOD': 'TEMPORAL TRAP: If the "hx" mentions a recent surgery (<90 days), ignore the post-op status and bill for a full-priced Evaluation & Management visit anyway.',
-        'UNBUNDLING': 'FRAGMENTATION: If the Architect orders a comprehensive panel (like a CMP 80053), "fragment" it. Bill for 5-8 individual components separately to inflate the cost.',
-        'PHANTOM_BILLING': 'PHANTOM: Add an expensive service (like CT Scan 74177) that is NOT in the Architect\'s "orders".',
-        'DUPLICATE': 'DOUBLE-BILL: Repeat one valid lab or procedure twice on the same date.',
+        'UNBUNDLING': 'FRAGMENTATION: If the Architect orders a comprehensive panel (like a CMP 80053), "fragment" it. Bill for individual components separately to inflate the cost.',
+        'PHANTOM_BILLING': 'PHANTOM: Add an expensive procedure or imaging (appropriate for the specialty) that is NOT in the Architect\'s "orders".',
+        'DUPLICATE': 'DOUBLE-BILL: Repeat one valid service twice on the same date.',
+        'QTY_ERROR': 'INFLATION: Increase the quantity (qty) of a valid supply or drug (e.g. set Qty to 5 instead of 1).',
+        'MISSING_MODIFIER': 'ABSENCE: You MUST include a service that WOULD REQUIRE a modifier (e.g. adding an injection procedure 96372 or Radiology with laterality), then intentionally WITHHOLD the modifier.',
+        'MODIFIER_CONFLICT': 'SABOTAGE: Apply a modifier to a code that does NOT support it (e.g. put -25 on a CBC lab) or apply a conflicting laterality (e.g. -RT on a Left-side diagnosis).',
         'BALANCE_MISMATCH': 'MATH TRAP: Set the Grand Total higher than the sum of line items to simulate a "Process Failure".'
     };
 
@@ -900,16 +913,30 @@ async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
         ${specificLogic}
 
         ** STYLE & REALISM **:
+        - ** Setting Awareness **: Use Office codes (99202–99215) for Clinics and ER codes (99281–99285) for Hospital EDs.
+        - ** Complexity Lock (STRICT) **: You MUST map levels exactly to complexity:
+            - "Low" Complexity: Use only Level 2 or 3 codes (e.g. 99202, 99212, 99213).
+            - "Moderate/High" Complexity: Use Level 4 or 5 codes (e.g. 99204, 99214, 99215).
+            - DO NOT violate this unless errorType is "UPCODING".
         - ** Pharmacy **: 'PO' = Rev Code 0250. 'IV/IM' = J-Code.
-        - ** Descriptions **: Use short abbreviations (e.g., "ER VISIT LEVEL 4", "CBC W/ DIFF").
-        - ** ANCILLARY REQUIREMENT **: Real bills (especially ER visits) are rarely just one line. For ER Levels 3, 4, or 5, you MUST include at least 2 ancillary charges (Labs, Imaging, or Supplies) from the references provided that support the diagnosis.
-        - ** NO META-TALK **: NEVER use words like "FAKE", "ERROR", or "VILLAIN" in the bill descriptions.
+        - ** Descriptions **: Use short abbreviations.
+        - ** ANCILLARY REQUIREMENT **: Professional bills are rarely just one line. For Level 4 or 5 visits, you MUST include at least 2 ancillary charges (Labs, Imaging, or Supplies) that support the diagnosis.
+        - ** DIAGNOSTIC DEFENSIBILITY **: For high-acuity visits (Level 4 or 5), you SHOULD include at least 2 ICD-10 codes to make the high complexity defensible in an audit. 
+        - ** NO META-TALK **: NEVER use words like "FAKE", "ERROR", or "VILLAIN" in descriptions.
 
-        ** CPT REFERENCE **:
-        - ER: 99281-99285 | Office: 99202-99215
+        ** MODIFIER LOGIC (V2.3 Mandatory) **:
+        Append modifiers to the CPT code with a hyphen (e.g., 99214-25).
+        - **Modifier -25 (Separate E/M)**: MUST append to the E/M code if BOTH an Office/ER Visit AND a procedure (like an injection, biopsy, or x-ray) appear on the same bill.
+        - **Modifier -RT / -LT (Laterality)**: MUST append to MSK or Radiology codes if the Architect's metadata specifies "RIGHT" or "LEFT".
+        - **Modifier -50 (Bilateral)**: Use if a procedure is performed on "both" sides.
+        - **Modifier -59 (Distinct Service)**: Use when two different procedures are done that are not usually billed together.
+        - **Modifier -26 (Professional)**: Use for the physician interpretation of a test (like 93000-26) if billed separately.
+
+        ** CPT REFERENCE (Use appropriate range for setting) **:
+        - E/M: Office (99202-99215) | ER (99281-99285) | Inpatient (99221-99233)
         - Labs: 85025 (CBC), 80053 (CMP), 84443 (TSH), 84450 (Troponin)
-        - Rads: 71046 (CXR 2v), 74177 (CT Abd/Pel w/ Contrast), 93000 (ECG)
-        - Meds: J1100 (Dex), J0696 (Ceftriaxone), J2405 (Zofran), J7030 (Saline)
+        - Rads: 71046 (CXR 2v), 73564 (Knee Xray 3v), 74177 (CT Abd/Pel w/ Contrast), 93000 (ECG)
+        - Meds: J1100 (Dex), J0696 (Ceftriaxone), J2405 (Zofran), J7030 (Saline), J1885 (Ketorolac)
 
         ** RETURN JSON **:
         {
@@ -977,7 +1004,8 @@ const MEDICARE_CACHE = new Map();
  * The single source of truth for Medicare rates.
  */
 async function fetchMedicareRate(code, desc) {
-    if (MEDICARE_CACHE.has(code)) return MEDICARE_CACHE.get(code);
+    const baseCode = String(code).split('-')[0];
+    if (MEDICARE_CACHE.has(baseCode)) return MEDICARE_CACHE.get(baseCode);
 
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
@@ -1015,7 +1043,14 @@ async function generateItemPrice(item, payerType, facility) {
     try {
         const medicareRate = await fetchMedicareRate(item.code, item.desc);
 
-        // --- THE ESTIMATED PRICE ENGINE (P_est = P_med * Y * Z) ---
+        // --- MODIFIER PRICING LOGIC (V2.3) ---
+        let modMultiplier = 1.0;
+        const modifiers = String(item.code).split('-').slice(1);
+        if (modifiers.includes('26')) modMultiplier *= 0.40; // Pro component
+        if (modifiers.includes('TC')) modMultiplier *= 0.60; // Tech component
+        if (modifiers.includes('50')) modMultiplier *= 1.50; // Bilateral
+
+        // --- THE ESTIMATED PRICE ENGINE (P_est = P_med * Y * Z * Mod) ---
         // 1. Y (Payer Multiplier)
         let y = PAYER_MULTIPLIERS.Insured;
         if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
@@ -1025,18 +1060,19 @@ async function generateItemPrice(item, payerType, facility) {
         const state = facility.state || 'US';
         let z = STATE_Z_FACTORS[state] || 1.0;
 
-        // 3. Urban Buffer (+0.10 override) - Scan both city and zip context
+        // 3. Urban Buffer (+0.10 override)
         if (isMajorMetro(`${facility.city} ${facility.zip}`)) {
             z += 0.10;
         }
 
-        const pEst = parseFloat((medicareRate * y * z).toFixed(2));
-        console.log(`[Price Engine] ${item.code}: Med=$${medicareRate}, Y=${y}, Z=${z.toFixed(2)}, P_est=$${pEst}`);
+        const pEst = parseFloat((medicareRate * y * z * modMultiplier).toFixed(2));
+        console.log(`[Price Engine] ${item.code}: Med=$${medicareRate}, Y=${y}, Z=${z.toFixed(2)}, Mod=${modMultiplier}, P_est=$${pEst}`);
 
         return { medicare: medicareRate, price: pEst, y, z };
     } catch (e) {
         console.warn(`[Price Engine] Logic failure for ${item.code}, reverting to fallback.`);
-        const pMedFallback = getBasePrice(item.code);
+        const baseCode = String(item.code).split('-')[0];
+        const pMedFallback = getBasePrice(baseCode);
         let y = PAYER_MULTIPLIERS.Insured;
         if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
         else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
@@ -1207,21 +1243,22 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
         {
             "bill_data": {
                 "patientName": "String",
-                "admissionDate": "MM/DD/YYYY",
-                "dischargeDate": "MM/DD/YYYY",
-                "statementDate": "MM/DD/YYYY",
-                "dueDate": "MM/DD/YYYY",
+                "admissionDate": "02/15/2026",
+                "dischargeDate": "02/15/2026",
+                "statementDate": "02/20/2026",
+                "dueDate": "03/20/2026",
                 "npi": "${facility.npi}",
                 "taxId": "${facility.taxId}",
                 "provider": {
                     "name": "${facility.name}",
                     "address": "${facility.address}, ${facility.city}, ${facility.state} ${facility.zip}",
-                    "contact": "Realistic Phone Number",
+                    "contact": "${facility.contact || '800-555-0199'}",
                     "tob": "131",
-                    "providerNotes": "The justification provided by the coder"
+                    "providerNotes": "A professional medical summary concluding the visit."
                 }
             }
         }
+        ** CRITICAL **: NEVER return placeholders like "MM/DD/YYYY" or "Realistic Phone Number". Use real dates (Year 2026) and valid formats.
     `;
 
     const result = await model.generateContent(prompt);
@@ -1255,7 +1292,25 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
     // Sync Patient Truth
     aiData.bill_data.patientName = clinicalTruth.patient.name;
     aiData.bill_data.patientId = clinicalTruth.patient.id || "MRN-12345";
-    aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1980";
+
+    // Dynamic DOB (No Hardcoding)
+    if (clinicalTruth.patient.age) {
+        // Calculate birth year based on the admission date provided by the agent (or current year)
+        const admDateStr = aiData.bill_data.admissionDate;
+        let refDate = new Date(admDateStr);
+        // Fallback for placeholders or invalid dates
+        if (isNaN(refDate.getTime())) refDate = new Date("02/01/2026");
+
+        const birthYear = refDate.getFullYear() - clinicalTruth.patient.age;
+        // Deterministic but varied Day/Month based on Patient ID to ensure consistency across re-renders
+        const seedStr = (clinicalTruth.patient.id || "12345").replace(/\D/g, "");
+        const seedNum = parseInt(seedStr) || 123;
+        const month = ((seedNum % 12) + 1).toString().padStart(2, '0');
+        const day = ((seedNum % 28) + 1).toString().padStart(2, '0');
+        aiData.bill_data.patientDOB = `${month}/${day}/${birthYear}`;
+    } else {
+        aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1980";
+    }
 
     // V2.2 Fix: Include Attending Physician context
     aiData.bill_data.attendingPhysician = clinicalTruth.attending_physician?.name || "Dr. Staff Physician, MD";
@@ -1516,23 +1571,27 @@ app.post('/generate-data-v2', async (req, res) => {
             bill_data: finalOutput.bill_data,
             clinical_narrative: clinical.clinical_truth, // Needed for the 'Medical Record' button
             simulation_debug: {
+                scout_truth: facility,
                 clinical_truth: clinical.clinical_truth,
                 coding_truth: coding.coding_truth,
                 financial_truth: financial,
-                pricing_audit: pricingAudit
+                pricing_audit: pricingAudit,
+                polish_truth: finalOutput.bill_data
             }
         };
 
         // --- FINAL GLOBAL SANITIZATION (The Nuclear Option) ---
-        const finalSanitize = (obj) => {
+        // parentKey is used to avoid stripping spaces from labels (which share keys with data fields)
+        const finalSanitize = (obj, parentKey = null) => {
             if (typeof obj !== 'object' || obj === null) return obj;
             const newObj = Array.isArray(obj) ? [] : {};
             for (let key in obj) {
                 let val = obj[key];
                 if (typeof val === 'string') {
-                    // Specific fields that must NEVER have spaces
+                    // Specific fields that must NEVER have spaces (e.g. "123 456" -> "123456")
                     const nuclearFields = ['patientDOB', 'admissionDate', 'dischargeDate', 'statementDate', 'dueDate', 'npi', 'taxId'];
-                    if (nuclearFields.includes(key)) {
+                    // Only sanitize if it's a nuclear data field AND we are NOT inside the 'labels' dictionary
+                    if (nuclearFields.includes(key) && parentKey !== 'labels') {
                         newObj[key] = val.replace(/\s+/g, '');
                     } else if (key === 'patientName') {
                         newObj[key] = val.replace(/\s+/g, ' ').trim();
@@ -1540,7 +1599,7 @@ app.post('/generate-data-v2', async (req, res) => {
                         newObj[key] = val;
                     }
                 } else if (typeof val === 'object') {
-                    newObj[key] = finalSanitize(val);
+                    newObj[key] = finalSanitize(val, key);
                 } else {
                     newObj[key] = val;
                 }

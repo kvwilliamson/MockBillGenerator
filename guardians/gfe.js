@@ -5,29 +5,27 @@ export async function auditGFE(billData, gfeData, payerType, model) {
         
         **INPUTS**:
         1. BILL DATA (Grand Total: ${billData.grandTotal})
-        2. GFE DATA (Estimated: ${gfeData ? gfeData.totalEstimatedCost : 'None'})
+        2. GFE DATA: ${gfeData && gfeData.totalEstimatedCost ? `$${gfeData.totalEstimatedCost}` : 'MISSING / NO GFE UPLOADED'}
 
-        **INSTRUCTIONS**:
-        1. IF GFE DATA IS NULL: Return passed: true.
-        2. CALCULATE DELTA: Final Bill (${billData.grandTotal}) MINUS GFE Estimate (${gfeData ? gfeData.totalEstimatedCost : '0'}).
-        3. **THRESHOLD TEST**: Is the Delta equal to or greater than $400?
-           - If Delta >= 400: Return passed: false.
-           - If Delta < 400: Return passed: true.
+        **CRITICAL INSTRUCTIONS**:
+        1. **BYPASS RULE**: If GFE DATA is "MISSING / NO GFE UPLOADED", you MUST return passed: true. It is impossible to have a threshold violation without an estimate.
+        2. **CALCULATE DELTA**: If GFE exists, Final Bill (${billData.grandTotal}) MINUS GFE Estimate.
+        3. **THRESHOLD TEST**: If Delta >= 400, return passed: false. Otherwise, true.
+        4. **NO GUESSING**: Do not assume an estimate of $0 if it is missing. If it is missing, the audit is a PASS by default.
         
         **RETURN JSON**:
         {
             "guardian": "GFE",
-            "passed": false,
-            "status": "FAIL",
-            "evidence": "Bill is $X above estimate.",
+            "passed": true | false,
+            "status": "PASS" | "FAIL",
+            "evidence": "Detailed explanation of result",
             "failure_details": {
                 "type": "GFE Threshold Violation",
-                "explanation": "State the exact calculation: Bill ($X) - GFE ($Y) = Delta ($Z). Cite the $400 threshold.",
+                "explanation": "State Bill ($X) - GFE ($Y) = Delta ($Z). Cite $400 limit.",
                 "severity": "High",
-                "overcharge_potential": "$Estimed overcharge"
+                "overcharge_potential": "$Delta"
             }
         }
-        (NOTE: If Delta < 400, set passed: true, status: "PASS", evidence: "Delta within $400 limit", and failure_details: null).
     `;
 
     const result = await model.generateContent(prompt);

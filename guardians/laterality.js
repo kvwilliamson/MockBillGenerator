@@ -8,9 +8,11 @@ export async function auditLaterality(billData, mrData, model) {
         2. MEDICAL RECORD (The Truth): ${JSON.stringify(mrData)}
 
         **INSTRUCTIONS**:
+        **INSTRUCTIONS**:
         1. Extract the anatomical side (Left, Right, Bilateral) mentioned in the Medical Record.
-        2. Extract the anatomical side mentioned in the CPT descriptions on the Bill.
-        3. **FINAL SANITY CHECK**: If the documented side in the record matches the billed side (e.g. Right Note vs Right Bill), you are STRICTLY PROHIBITED from flagging a failure. You MUST return passed: true.
+        2. Extract the anatomical side mentioned in the CPT codes (e.g. -RT, -LT, -50) or descriptions on the Bill.
+        3. **MODIFIER CHECK**: If a code has an -RT but the record says "Left", or a code has -LT but the record says "Right", this is a FAIL.
+        4. **FINAL SANITY CHECK**: If the sides match (e.g. record says Right and bill has -RT or "Right"), you are strictly prohibited from flagging a failure.
         
         **RETURN JSON**:
         {

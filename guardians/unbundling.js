@@ -7,9 +7,12 @@ export async function auditUnbundling(billData, model) {
         1. BILL DATA: ${JSON.stringify(billData)}
 
         **INSTRUCTIONS**:
-        1. Look for multiple individual lab components (e.g., Glucose, Sodium, Potassium) or procedure parts billed separately.
-        2. Determine if these should have been "bundled" into a single CPT code (like a CMP - 80053 or CBC - 85025).
-        3. **FINAL SANITY CHECK**: If the bill already uses comprehensive panel codes (e.g. 80053, 80048, 85025) and does NOT list their individual components separately, you MUST return passed: true.
+        **INSTRUCTIONS**:
+        1. Look for multiple individual lab components (e.g., Glucose, Sodium, Potassium billed separately instead of a CMP).
+        2. Look for procedure "parts" (e.g., billing for an incision and a closure separately for one surgery).
+        3. **MODIFIER DEFENSE**: If a procedure has a -59 (Distinct Service) or an E/M code has a -25 (Separate E/M), verify if the Medical Record justifies the separation. If the modifier is present and correctly used, this is NOT unbundling.
+        4. **NO CROSS-DEPARTMENT FLAGGING**: If the bill lists distinct services from different departments (e.g., 85025 CBC and 71046 CXR), this is NOT unbundling.
+        5. **FINAL SANITY CHECK**: If the bill uses comprehensive panel codes (e.g. 80053, 85025) correctly, return passed: true.
         
         **RETURN JSON**:
         {

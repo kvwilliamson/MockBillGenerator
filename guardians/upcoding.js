@@ -10,13 +10,14 @@ export async function auditUpcoding(billData, mrData, model) {
 
         **INSTRUCTIONS**:
         1. Identify the highest Billed E/M Level (e.g., 99285, 99215).
-        2. Evaluate the Medical Record: 
+        2. Evaluate the Medical Record (The Truth): 
            - Vitals stability (BP, HR, SpO2).
-           - Complexity of the SOAP narrative.
+           - Complexity of the SOAP narrative (Is it a complex multi-system problem or a simple one-issue visit?).
            - Quantity of labs/imaging performed.
-        3. **CLINICAL STANDARD**: Do NOT flag low-to-moderate levels (e.g. 99282, 99283) for common complaints like cough or small lacerations unless the record is empty or vitals are missing. Level 1-3 are generally baseline for any professional assessment.
+        3. **DIAGNOSTIC VERIFICATION**: Look at the ICD-10 codes on the bill. If there are multiple codes (e.g., Primary + Secondary symptoms), check if BOTH are documented/managed in the SOAP Assessment and Plan. If the bill lists symptoms (like fever or pain) that the medical record explicitly denies, this is a FORENSIC FAIL.
+        4. **ACUITY SKEPTICISM**: Be extremely skeptical of Level 4 (99284) or Level 5 (99285) codes for common/minor complaints (sore throat, cough, stable chronic rash) if vitals are stable and no acute distress is noted. Level 4/5 requires high medical decision-making complexity; a "virus" diagnosis with "supportive care" plan almost never qualifies.
         
-        **FINAL SANITY CHECK**: If the clinical evidence (narrative complexity + resource use) matches the billed E/M level, you MUST return passed: true.
+        **FINAL SANITY CHECK**: If the clinical evidence (narrative complexity + resource use + vitals) does not justify the high-intensity level billed, you MUST return passed: false.
         
         **RETURN JSON**:
         {

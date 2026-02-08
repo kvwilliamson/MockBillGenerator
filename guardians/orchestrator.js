@@ -8,6 +8,7 @@ import { auditUnbundling } from './unbundling.js';
 import { auditDuplicates } from './duplicate.js';
 import { auditGFE } from './gfe.js';
 import { auditBalanceBilling } from './balance_billing.js';
+import { auditModifiers } from './modifier.js';
 import { evaluateSimulation } from './judge.js';
 
 export async function runDeepDiveAudit(billData, mrData, actuaryData, gfeData, params, model, parseJson) {
@@ -24,8 +25,11 @@ export async function runDeepDiveAudit(billData, mrData, actuaryData, gfeData, p
         auditPrice(billData, actuaryData, model).then(parseJson),
         auditUnbundling(billData, model).then(parseJson),
         auditDuplicates(billData, model).then(parseJson),
-        auditGFE(billData, gfeData, payerType, model).then(parseJson),
-        auditBalanceBilling(billData, payerType, model).then(parseJson)
+        (gfeData && gfeData.totalEstimatedCost)
+            ? auditGFE(billData, gfeData, payerType, model).then(parseJson)
+            : Promise.resolve({ guardian: "GFE", passed: true, status: "PASS", evidence: "No GFE provided for audit.", failure_details: null }),
+        auditBalanceBilling(billData, payerType, model).then(parseJson),
+        auditModifiers(billData, mrData, model).then(parseJson)
     ]);
 
     console.log(`[Audit] Blind Audit Complete. Invoking Simulation Judge...`);
