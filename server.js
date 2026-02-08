@@ -693,7 +693,8 @@ async function supplementalAudit(billData, existingIssues) {
         1. **TOB 131** is ALWAYS correct and standard for Emergency/Outpatient visits. (DO NOT FLAG).
         2. **NPIs** must be 10 digits and generally start with '1' or '2'. (DO NOT FLAG if 10 digits).
         3. **Tax IDs** (EINs) are standard in the XX-XXXXXXX format. (DO NOT FLAG).
-        4. **Clinical Scaling**: ER Visit levels (99281-99285) and Office levels (99202-99215) must scale reasonably with the documented severity. High complexity warrants higher levels.
+        4. **Clinical Scaling**: ER Visit levels (99281-99285) and Office levels (99202-99215) must scale reasonably with severity.
+        5. **Age Calculation (BKM)**: Perform subtraction yourself. If Current Year is 2026 and Birth Year is 1995, the patient is 31. They are NOT a minor. DO NOT misidentify adults as minors.
         
         **FOCUS ON**:
         1. **Administrative Errors**: Typos in names, non-10-digit NPIs.
