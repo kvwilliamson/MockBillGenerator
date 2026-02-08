@@ -129,6 +129,7 @@ export const BillTemplate = ({ data }) => {
             <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f9f9f9', padding: '15px', border: '1px solid #ddd', marginBottom: '20px' }}>
                 <div>
                     <div><strong>{data.labels?.patient || 'PATIENT'}:</strong> {patientName}</div>
+                    <div><strong>Patient ID:</strong> {data.patientId || "MRN-12345"}</div>
                     <div><strong>{data.labels?.dob || 'DOB'}:</strong> {patientDOB}</div>
                     {/* Only show Admit/Disch for Inpatient or if dates differ significantly. 
                         For Clinic/Office (Rev 0510, Single Day), we just show Date of Service or suppress. 

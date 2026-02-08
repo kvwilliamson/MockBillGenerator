@@ -596,6 +596,8 @@ async function generateMedicalRecord(billData) {
         {
             "medical_record": {
                 "visitDate": "MM/DD/YYYY",
+                "patientId": "${billData.patientId || 'MRN-12345'}",
+                "patientDob": "${billData.patientDOB || '01/01/1980'}",
                 "author": "Name, MD",
                 "chiefComplaint": "String",
                 "hpi": "Paragraph text...",
@@ -629,17 +631,12 @@ async function analyzeBill(billData, errorType, gfeData = null, mrData = null, g
         **TARGET INVESTIGATION**: "${errorType}"
 
         **INSTRUCTIONS**:
-        1. **Review Context**: 
-           - **ONLY** use the data provided in the INPUTS above.
-           - Compare the Bill against the Medical Record (if provided).
-           - **Internal Notes**: If provided, use the "Internal Audit Notes" as a strong hint, but verify the evidence in the bill yourself.
-        2. **Determine Certainty**: 
-           - How likely is it that the bill contains the "${errorType}" error?
-           - Assign a **Certainty Score** (0-100%).
-        3. **Explain**:
-           - Cite specific evidence.
-        4. **Check for Other Errors**:
-           - Scan for duplicate charges, math errors, etc.
+        1. **CHALLENGE THE LOGIC**: Your primary directive is to **challenge the clinical logic** of the bill. Do not be "polite" or "timid." If the medical data (vitals, diagnosis) does not match the service level, you MUST declare a discrepancy.
+        2. **Forensic Comparison**: 
+           - **STRICTLY** compare the vitals and narrative in the Medical Record against the CPT level.
+           - If vitals are stable but the bill is high (e.g. Level 4/5), this is a red flag.
+        3. **Internal Notes**: Use the "Internal Audit Notes" as a baseline truth for what was *intended*, but provide your own forensic proof from the bill.
+        4. **Scoring**: Low certainty (under 30%) is a failure of your audit. Take a stand based on the data provided.
 
         **RETURN JSON**:
         {
@@ -837,6 +834,7 @@ async function generateClinicalArchitect(params, scoutContext) {
             "clinical_truth": {
                 "patient": {
                     "name": "String",
+                    "id": "MRN-XXXXX (Unique 5-digit number)",
                     "age": Number,
                     "gender": "M/F",
                     "hx": "Brief relevant medical history, including recent surgeries if applicable"
@@ -1256,6 +1254,7 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
 
     // Sync Patient Truth
     aiData.bill_data.patientName = clinicalTruth.patient.name;
+    aiData.bill_data.patientId = clinicalTruth.patient.id || "MRN-12345";
     aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1980";
 
     // V2.2 Fix: Include Attending Physician context

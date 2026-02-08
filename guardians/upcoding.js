@@ -23,7 +23,7 @@ export async function auditUpcoding(billData, mrData, model) {
             "guardian": "Upcoding",
             "passed": false, 
             "status": "FAIL",
-            "evidence": "Forensic proof (e.g. '99285 billed for minor cough with stable vitals')",
+            "evidence": "Forensic Proof (MANDATORY: Cite exact vitals/indicators used, e.g. 'Level 4 for BP 120/80 and normal exam')",
             "failure_details": {
                 "type": "Upcoding / Over-leveling",
                 "explanation": "Provide a 2-3 sentence clinical explanation of WHY the billed level exceeds the documented complexity.",

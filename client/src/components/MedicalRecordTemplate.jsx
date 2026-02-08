@@ -24,8 +24,8 @@ export const MedicalRecordTemplate = ({ data }) => {
                         <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>{mr.author}</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>DOB: N/A</div>
-                        {/* Note: In a real app we'd pass patient DOB here, using N/A for now if not in mr object */}
+                        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>ID: {mr.patientId || "MRN-12345"}</div>
+                        <div style={{ fontSize: '13px' }}>DOB: {mr.patientDob || "01/01/1980"}</div>
                         <div>Encounter Date: {mr.visitDate}</div>
                     </div>
                 </div>
