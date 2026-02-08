@@ -1119,41 +1119,47 @@ async function generateFinancialClerk(codingTruth, payerType, errorType = 'CLEAN
         };
     }));
 
-    const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+    const trueSubtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+    let reportedSubtotal = trueSubtotal;
+
+    if (errorType === "MATH_ERROR") {
+        // SABOTAGE: Bury the error in the line-item summation.
+        // The Reported Subtotal will NOT match the sum of individual items.
+        const discrepancy = 10 + (Math.random() * 40);
+        reportedSubtotal = parseFloat((trueSubtotal + discrepancy).toFixed(2));
+    }
 
     // 3. ADJUSTMENTS & INSURANCE (The "Process" Logic)
+    // We use the reported (potentially bad) subtotal for the rest of the math
     let adjustments = 0;
     let adjBreakdown = [];
     if (!isSelfPay) {
         // Standard 40% Insurance Write-off
-        adjustments = parseFloat((subtotal * 0.40).toFixed(2));
+        adjustments = parseFloat((reportedSubtotal * 0.40).toFixed(2));
         adjBreakdown.push({ label: "Contractual Adj", amount: -adjustments });
     }
 
-    const insPaidRaw = (isSelfPay || isMedicare) ? 0 : parseFloat((subtotal * 0.10).toFixed(2));
+    const insPaidRaw = (isSelfPay || isMedicare) ? 0 : parseFloat((reportedSubtotal * 0.10).toFixed(2));
     const insPaid = insPaidRaw === 0 ? 0 : -insPaidRaw;
 
     // 4. THE GRAND TOTAL TRAP (The "Sabotage")
     let grandTotal;
-    if (errorType === "MATH_ERROR") {
-        // HARD SABOTAGE: Intentionally add a random discrepancy between $10 and $50
-        const discrepancy = 10 + Math.random() * 40;
-        grandTotal = parseFloat((subtotal - adjustments - insPaidRaw + discrepancy).toFixed(2));
-    } else if (errorType === "BALANCE_MISMATCH") {
-        // "Forget" to subtract adjustments and insurance payments.
-        grandTotal = parseFloat(subtotal.toFixed(2));
+    if (errorType === "BALANCE_MISMATCH") {
+        // SABOTAGE: "Forget" to subtract adjustments.
+        grandTotal = parseFloat(reportedSubtotal.toFixed(2));
     } else {
-        // HONEST MATH
-        grandTotal = parseFloat((subtotal - adjustments - insPaidRaw).toFixed(2));
+        // HONEST MATH (relative to the reported subtotal)
+        grandTotal = parseFloat((reportedSubtotal - adjustments - insPaidRaw).toFixed(2));
     }
 
     return {
         lineItems,
-        subtotal: parseFloat(subtotal.toFixed(2)),
+        subtotal: parseFloat(reportedSubtotal.toFixed(2)),
         adjustments: -adjustments,
         adjustmentsBreakdown: adjBreakdown,
         insPaid: insPaid,
-        grandTotal: grandTotal
+        grandTotal: grandTotal,
+        true_subtotal_audit: trueSubtotal // Hidden field for internal simulation tracking
     };
 }
 
