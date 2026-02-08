@@ -886,8 +886,8 @@ async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
 
     // I. CONDITIONAL PROMPTING (BKM: Prevent Instruction Leakage)
     const villainLogics = {
-        'CLEAN': "Produce a PERFECT, CPC-compliant bill with ZERO errors. Adhere strictly to the Architect's truth and metadata.",
-        'UPCODING': 'GASLIGHTING: Ignore the "Low" Complexity level. Exaggerate a single Vital Sign or Symptom to justify a Level 4 or Level 5 E/M service appropriate for the setting (e.g., if at a Clinic, use 99204/99214).',
+        'CLEAN': "Produce a PERFECT, CPC-compliant bill with ZERO errors. You MUST include required modifiers (like -25 if a procedure is present).",
+        'UPCODING': 'GASLIGHTING: Exaggerate the complexity. If the input is Low, use Level 4/5. If the input is High, push into Critical Care (99291) or bill for extensive MDM that exceeds the stabilized vitals.',
         'RECORD_MISMATCH': 'LATERALITY FLIP: Intentionally override the Architect\'s metadata.primary_anatomical_side. If the record says "Left", you must code for "Right" in the CPT description.',
         'GLOBAL_PERIOD': 'TEMPORAL TRAP: If the "hx" mentions a recent surgery (<90 days), ignore the post-op status and bill for a full-priced Evaluation & Management visit anyway.',
         'UNBUNDLING': 'FRAGMENTATION: If the Architect orders a comprehensive panel (like a CMP 80053), "fragment" it. Bill for individual components separately to inflate the cost.',
@@ -914,10 +914,8 @@ async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
 
         ** STYLE & REALISM **:
         - ** Setting Awareness **: Use Office codes (99202–99215) for Clinics and ER codes (99281–99285) for Hospital EDs.
-        - ** Complexity Lock (STRICT) **: You MUST map levels exactly to complexity:
-            - "Low" Complexity: Use only Level 2 or 3 codes (e.g. 99202, 99212, 99213).
-            - "Moderate/High" Complexity: Use Level 4 or 5 codes (e.g. 99204, 99214, 99215).
-            - DO NOT violate this unless errorType is "UPCODING".
+        - ** Complexity Lock (STRICT) **: You MUST map levels exactly to complexity unless errorType is "UPCODING".
+        - ** Administrative Accuracy **: You MUST include required modifiers (like -25) on ALL bills unless errorType is "MISSING_MODIFIER" or "MODIFIER_CONFLICT". Omitting a -25 on an UPCODING bill is considered poor craftsmanship and will fail simulation quality.
         - ** Pharmacy **: 'PO' = Rev Code 0250. 'IV/IM' = J-Code.
         - ** Descriptions **: Use short abbreviations.
         - ** ANCILLARY REQUIREMENT **: Professional bills are rarely just one line. For Level 4 or 5 visits, you MUST include at least 2 ancillary charges (Labs, Imaging, or Supplies) that support the diagnosis.
@@ -1299,17 +1297,20 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
         const admDateStr = aiData.bill_data.admissionDate;
         let refDate = new Date(admDateStr);
         // Fallback for placeholders or invalid dates
-        if (isNaN(refDate.getTime())) refDate = new Date("02/01/2026");
+        if (isNaN(refDate.getTime())) refDate = new Date("02/15/2026");
 
         const birthYear = refDate.getFullYear() - clinicalTruth.patient.age;
-        // Deterministic but varied Day/Month based on Patient ID to ensure consistency across re-renders
+        // Deterministic but varied Day/Month based on Patient ID to ensure consistency
         const seedStr = (clinicalTruth.patient.id || "12345").replace(/\D/g, "");
         const seedNum = parseInt(seedStr) || 123;
-        const month = ((seedNum % 12) + 1).toString().padStart(2, '0');
+
+        // Ensure the generated month/day falls BEFORE the admission/refDate to avoid off-by-one age flipping
+        // (if today is Feb 15 and your birthday is Jun 1, you are technically age X-1)
+        const month = ((seedNum % refDate.getMonth()) + 1).toString().padStart(2, '0');
         const day = ((seedNum % 28) + 1).toString().padStart(2, '0');
         aiData.bill_data.patientDOB = `${month}/${day}/${birthYear}`;
     } else {
-        aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1980";
+        aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1950";
     }
 
     // V2.2 Fix: Include Attending Physician context

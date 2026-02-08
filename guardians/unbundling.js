@@ -7,12 +7,16 @@ export async function auditUnbundling(billData, model) {
         1. BILL DATA: ${JSON.stringify(billData)}
 
         **INSTRUCTIONS**:
-        **INSTRUCTIONS**:
-        1. Look for multiple individual lab components (e.g., Glucose, Sodium, Potassium billed separately instead of a CMP).
-        2. Look for procedure "parts" (e.g., billing for an incision and a closure separately for one surgery).
-        3. **MODIFIER DEFENSE**: If a procedure has a -59 (Distinct Service) or an E/M code has a -25 (Separate E/M), verify if the Medical Record justifies the separation. If the modifier is present and correctly used, this is NOT unbundling.
-        4. **NO CROSS-DEPARTMENT FLAGGING**: If the bill lists distinct services from different departments (e.g., 85025 CBC and 71046 CXR), this is NOT unbundling.
-        5. **FINAL SANITY CHECK**: If the bill uses comprehensive panel codes (e.g. 80053, 85025) correctly, return passed: true.
+        1. **Lab Panel Knowledge**: 
+           - **BMP (80048)**: Glucose, Calcium, Sodium, Potassium, CO2, Chloride, BUN, Creatinine.
+           - **CMP (80053)**: All BMP + Albumin, Total Protein, ALP, AST, ALT, Bilirubin.
+           - **CBC (85025)**: WBC, RBC, Hgb, Hct, Platelets, Differential. (CBC is NOT part of a CMP/BMP).
+           - **Troponin (84450)**: Is a STANDALONE cardiac enzyme. It is NOT part of a standard CMP/BMP.
+        2. ** Fragmentation Check**: Look for individual BMP/CMP components billed separately.
+        3. **Procedure Parts**: Look for "incision" and "closure" billed separately for one surgery.
+        4. **MODIFIER DEFENSE**: If a procedure has a -59 (Distinct Service) or an E/M code has a -25 (Separate E/M), verify if the Medical Record justifies the separation. If the modifier is present and correctly used, this is NOT unbundling.
+        5. **NO CROSS-DEPARTMENT FLAGGING**: If the bill lists distinct services from different departments (e.g., Labs vs Radiology), this is NOT unbundling.
+        6. **FINAL SANITY CHECK**: If the bill uses comprehensive panel codes (e.g. 80053) correctly, return passed: true.
         
         **RETURN JSON**:
         {

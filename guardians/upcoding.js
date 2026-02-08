@@ -9,15 +9,14 @@ export async function auditUpcoding(billData, mrData, model) {
         2. MEDICAL RECORD (The Truth): ${JSON.stringify(mrData)}
 
         **INSTRUCTIONS**:
-        1. Identify the highest Billed E/M Level (e.g., 99285, 99215).
-        2. Evaluate the Medical Record (The Truth): 
-           - Vitals stability (BP, HR, SpO2).
-           - Complexity of the SOAP narrative (Is it a complex multi-system problem or a simple one-issue visit?).
-           - Quantity of labs/imaging performed.
-        3. **DIAGNOSTIC VERIFICATION**: Look at the ICD-10 codes on the bill. If there are multiple codes (e.g., Primary + Secondary symptoms), check if BOTH are documented/managed in the SOAP Assessment and Plan. If the bill lists symptoms (like fever or pain) that the medical record explicitly denies, this is a FORENSIC FAIL.
-        4. **ACUITY SKEPTICISM**: Be extremely skeptical of Level 4 (99284) or Level 5 (99285) codes for common/minor complaints (sore throat, cough, stable chronic rash) if vitals are stable and no acute distress is noted. Level 4/5 requires high medical decision-making complexity; a "virus" diagnosis with "supportive care" plan almost never qualifies.
+        1. **Clinical Anchor Points (CPT Standards)**:
+           - **Level 5 (99285/99215)**: Requires HIGH complexity. Justified by life-threatening conditions, hypoxia (SpO2 < 90%), unstable vitals, extreme pain (8-10/10), or management of 3+ chronic issues.
+           - **Level 4 (99284/99214)**: Requires MODERATE complexity. Justified by acute illness with systemic symptoms or new major injuries.
+           - **Level 3 (99283/99213)**: Requires LOW complexity. Standard minor injury/acute illness (sore throat, simple rash).
+        2. **Audit Check**: Evaluate the Medical Record against these anchors.
+        3. **ACUITY SKEPTICISM**: Only flag if the billed level is CLEARLY above the clinical story. If a patient has 9/10 chest pain and SpO2 89%, a Level 5 is 100% CORRECT. Do NOT flag it.
         
-        **FINAL SANITY CHECK**: If the clinical evidence (narrative complexity + resource use + vitals) does not justify the high-intensity level billed, you MUST return passed: false.
+        **FINAL SANITY CHECK**: If the clinical evidence (narrative complexity + resource use + vitals) supports the complexity, set passed: true.
         
         **RETURN JSON**:
         {
