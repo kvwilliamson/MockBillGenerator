@@ -1,75 +1,50 @@
-# FairMedBill Mock Bill Generator (V2.3 - "Forensic Edition")
+# FairMedBill Mock Bill Generator (V2.4 - "The Deceptive Era")
 
-A state-of-the-art medical bill simulation engine designed to produce high-fidelity, clinically authentic, and forensically "sabotaged" mock bills. Version 2.3 introduces the **Modifier Sentinel**, **Strict Complexity Locking**, and the **Deterministic Simulation Judge**.
+A state-of-the-art medical bill simulation engine designed to produce high-fidelity, clinically authentic, and forensically "sabotaged" mock bills. Version 2.4 introduces **Deceptive Math Sabotage**, **Deterministic Guardians**, and the **Arithmetic Meta-Audit**.
 
 ## 🚀 Mission Statement
-To produce Best Known Method (BKM) real-world mock bills that look 100% authentic to auditors but contain specific, detectable forensic errors. V2.3 focuses on **Isolation of Intent**, ensuring that if you test for "Upcoding," the bill doesn't fail for "Missing Modifiers" by accident.
+To produce Best Known Method (BKM) real-world mock bills that look 100% authentic to auditors but contain specific, detectable forensic errors. V2.4 focuses on **Hiding the Needle**, ensuring that errors are no longer obvious "typos" but structural mismatches that require deep line-item analysis.
 
 ---
 
 ## 🛠 Features
 
-### 1. The V2.3 "Forensic" Generation Chain
-The engine uses a 6-phase lifecycle to create a "locked" forensic data chain, where errors are intentionally buried using realistic clinical and financial deception.
+### 1. The V2.4 "Forensic" Generation Chain
 
-- **Phase 0: The Facility Scout (V2.3)**: Establishes the real-world grounding. Selects U.S. facilities and generates **Deterministic, Luhn-valid identifiers** (NPI/EIN) outside the LLM.
-- **Phase 1: The Clinical Architect (V2.3)**: Generates the medical "Truth." 
-    - **Vitals Calibration**: Produces objective evidence (BP, SpO2, HR, RR) used as anchors for auditing.
-    - **Setting-Awareness**: Distinguishes between Clinic (Rev Code 0510) and ER (Rev Code 0450) environments.
-- **Phase 2: The Medical Coder (V2.3 - "The Infiltrator")**:
+- **Phase 0: The Facility Scout (V2.4)**: Establishes real-world grounding. Selects U.S. facilities and generates **Deterministic, Luhn-valid identifiers** (NPI/EIN) outside the LLM.
+- **Phase 1: The Clinical Architect (V2.4)**: Generates the medical "Truth." 
+- **Phase 2: The Medical Coder (V2.4 - "The Infiltrator")**:
     - **Complexity Lock (STRICT)**: Maps complexity levels (Low/Mod/High) to specific CPT ranges (Level 2-3 vs Level 4-5) to prevent code-drift.
-    - **Modifier Edition**: Automatically appends required modifiers (`-25`, `-RT`, `-LT`, `-50`) to "Clean" bills while selectively withholding them in "Sabotage" scenarios.
-    - **Selective Sabotage**: Receives a single "Villain Logic" (e.g., Unbundling) and is instructed to maintain perfect administrative accuracy elsewhere.
-- **Phase 3: The Financial Clerk (V2.3 - "Pricing Engine")**:
-    - **Modifier Pricing Multipliers**: Automatically adjusts pricing for Professional Components (`-26`: 40%), Technical Components (`-TC`: 60%), and Bilateral Procedures (`-50`: 150%).
-    - **Deterministic Math**: Calculates totals in Javascript to prevent AI-generated math errors (unless "Math Error" is the intended scenario).
-- **Phase 4: The Publisher (V2.3 - "Administrative Guard")**:
-    - **Fiscal Year Alignment**: Calculates Patient DOB based on admission year (2026) with an off-by-one guard to match stated age.
-    - **Placeholder Purge**: Strictly forbids `MM/DD/YYYY` or dummy phone numbers in the final artifact.
-- **Phase 5: Compliance Sentinel**: Appends regulatory disclaimers (No Surprises Act) and identifies administrative typos for secondary auditing.
+    - **Modifier Edition**: Automatically appends required modifiers (`-25`, `-RT`, `-LT`, `-50`) to "Clean" bills.
+- **Phase 3: The Financial Clerk (V2.4 - "The Aggregation Trap")**:
+    - **Hidden Math Sabotage**: In `MATH_ERROR` scenarios, the generator poisons the **Subtotal** itself. 
+    - **Consistent Deception**: Subsequent calculations (Adjustments/Grand Total) are derived from the *bad subtotal*, making the bottom-line math look superficially correct while the sum of line items is secretly invalid.
+- **Phase 4: The Publisher (V2.4 - "Administrative Guard")**:
+    - **Fiscal Year Alignment**: Calculates Patient DOB based on admission year (2026) with an off-by-one guard to match stated age exactly.
+- **Phase 5: Compliance Sentinel**: Appends regulatory disclaimers and identifies administrative typos.
 
-### 2. Forensic Auditing Engine ("The 10 Guardians - V2.3")
-The V2.3 Auditor uses a **Zero-Trust Parallel Loop** to verify the bill without knowing the intended error.
+### 2. Forensic Auditing Engine ("The 10 Guardians - V2.4")
+The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculation anchors.
 
-1.  **Agent #9: The Modifier Sentinel (NEW)**: Enforces "Non-Negotiable" CPT rules. Checks for the -25 rule (E/M + Procedure) and Laterality mandates.
-2.  **Agent #10: The Simulation Judge (V2.3)**: 
-    - **Strict Scenario Mapping**: Only counts a "PASS" for the generator if the *specific* intended error was the one caught. 
-    - **Hallucination Detection**: Compares Guardian findings against raw Bill Data. If a guardian red-flags a code that is actually correct, the Judge issues a **"Hallucination Detected"** verdict.
-3.  **Deterministic Price Sentry**: math logic is handled by Javascript. A price is only flagged as "Gouging" if it mathematically exceeds Benchmark + 20%.
+1.  **Agent #7: Deterministic Math Guardian**: No longer uses AI for arithmetic. Performs a **Bottom-Up JS Summation** of every line item to detect $0.01 discrepancies or poisoned subtotals.
+2.  **Agent #10: The Simulation Judge (V2.4)**: 
+    - **Arithmetic Meta-Audit**: Perform its own hard math check on the raw data. If a guardian claims "Totals match" on a poisoned subtotal, the Judge issues a **"Logic Gap Detected"** and drops the fidelity score to 0.
+    - **Strict Scenario Mapping**: Error detection *must* match the intended scenario (e.g., catching a modifier error during a Math test is a Logic Gap).
+3.  **Deterministic Price Sentry**: Pricing logic is handled by Javascript. Triggered only if math exceeds Benchmark + 20%.
 4.  **Upcoding Guardian (Clinical Anchors)**: Uses hard thresholds (e.g., hypoxia < 90% or pain 9/10) to validate high-intensity billing.
-5.  **Unbundling Guardian (Panel Dictionary)**: Contains explicit knowledge of CMP, BMP, and CBC panels to prevent "Lazy Fails" on standalone cardiac enzymes.
-6.  **Record Match (Binary Laterality)**: Strictly compares `-RT/-LT` modifiers against the Architect's anatomical truth.
+5.  **Modifier Sentinel**: Enforces "Non-Negotiable" CPT rules. Checks for the -25 rule (E/M + Procedure) and Laterality mandates.
 
 ---
 
-## 📖 How to Use
+## 🧪 Forensic Accuracy Standards (V2.4)
 
-### Running Locally
-From the project root:
-```bash
-npm run dev
-```
-- **Backend API**: `http://localhost:4000`
-- **Frontend UI**: `http://localhost:5173`
-
-### The Forensic Workflow
-1.  **Configure**: Select Specialty, Payer, Complexity, and the "Gotcha" (Error Scenario).
-2.  **Generate**: Execute **Generate Mock Bill V2**. Review the internal "Truth" in the debug logs.
-3.  **Audit**: Run **Verify with Gemini**. 
-4.  **Evaluate**: Review the **Simulation Quality Report**. Look for the `Fidelity Score` and the `Judge's Verdict` to see if the auditor was tricked or if it correctly identified the sabotage.
-
----
-
-## 🧪 Forensic Accuracy Standards (V2.3)
-
-| Component | V2.2 Standard | V2.3 Standard (Current) |
+| Component | V2.3 Standard | V2.4 Standard (Current) |
 | :--- | :--- | :--- |
-| **Administrative** | Hardcoded DOBs | Fiscal-Year Aligned Dynamic DOB |
-| **Modifiers** | Optional | Context-Aware Mandatory (-25, -RT, -LT) |
-| **Pricing** | Multiplier-Based | Multiplier + Component-Aware (-26/-TC) |
-| **Upcoding** | Vague Complexity | Clinical Anchor Point Validation |
-| **Auditing** | 6 Guardians | 10 Guardians + Judge Meta-Audit |
-| **Hallucinations** | Passively accepted | Hard-blocked by Judge Sanity Check |
+| **Math Sabotage** | Bottom-line Mismatch | **Aggregation Trap (Poisoned Subtotal)** |
+| **Math Auditing** | AI Arithmetic (Unreliable) | **Deterministic JS Summation** |
+| **Age Logic** | Variable | **Fiscal-Year Dynamic Subtracting** |
+| **Judge Verdict** | Scenario Based | **Arithmetic Meta-Audit + Hallucination Check** |
+| **Guardians** | AI Prompt-Based | **Hybrid (JS Decision + AI Explanation)** |
 
 ---
 
