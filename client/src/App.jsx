@@ -63,6 +63,9 @@ function App() {
     const [supplementalData, setSupplementalData] = useState(null);
     const [viewMode, setViewMode] = useState('BILL'); // 'BILL', 'GFE', 'MR'
     const [error, setError] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [modifiedHtml, setModifiedHtml] = useState(null); // Persist edits even if toggled off
+    const previewRef = React.useRef(null);
 
     const handleGenerate = async () => {
         setActiveGenerator('V1');
@@ -74,6 +77,7 @@ function App() {
         setAnalysisData(null);
         setDeepDiveData(null);
         setSupplementalData(null);
+        setModifiedHtml(null);
         setViewMode('BILL');
         try {
             // Connect to standalone backend
@@ -109,6 +113,7 @@ function App() {
         setAnalysisData(null);
         setDeepDiveData(null);
         setSupplementalData(null);
+        setModifiedHtml(null);
         setViewMode('BILL');
         try {
             const response = await axios.post('http://localhost:4000/generate-data-v2', {
@@ -226,74 +231,74 @@ function App() {
     const handleCopyHardeningData = () => {
         if (!generatedData) return;
 
+        const report = {
+            metadata: {
+                timestamp: new Date().toISOString(),
+                version: "V2.2.1-Modular-Auditor"
+            },
+            inputs: {
+                specialty,
+                complexity,
+                payerType,
+                intendedError: errorType
+            },
+            simulation_telemetry: generatedData.simulation_debug || generatedData.ground_truth || {},
+            bill_data: generatedData.bill_data || {},
+            medical_record: mrData || "NOT_GENERATED",
+            gfe_data: gfeData || "NOT_GENERATED",
+            audit_analysis: {
+                gemini_overview: analysisData?.analysis || "NOT_VERIFIED",
+                forensic_audit: deepDiveData || "NOT_AUDITED",
+                compliance_sentinel: supplementalData || "NOT_AUDITED"
+            }
+        };
+
         const hardeningPrompt = `
-### 🛠️ FAIRMEDBILL GENERATOR HARDENING REPORT
-**OBJECTIVE**: Create the most realistic mock bill possible for the selections made, specifically for the error requested. Identify logic gaps ONLY if the generator failed to meet this high standard of realism and clinical accuracy.
+### 🛠️ FAIRMEDBILL GENERATOR DEBUGGING & HARDENING REPORT
+**OBJECTIVE**: Troubleshooting and improving Generator V2.2 realism.
 
 #### 1. INPUT PARAMETERS
-- Specialty: ${specialty}
-- Complexity: ${complexity}
-- Payer: ${payerType}
-- Intended Error: ${errorType}
+- Specialty: ${report.inputs.specialty}
+- Complexity: ${report.inputs.complexity}
+- Payer: ${report.inputs.payerType}
+- Intended Error: ${report.inputs.intendedError}
 
-#### 2. INTERNAL AGENT REASONING (The "Truths")
-${JSON.stringify(generatedData.simulation_debug || generatedData.ground_truth, null, 2)}
-
-#### 3. GENERATED RAW BILL
-${JSON.stringify(generatedData.bill_data, null, 2)}
-
-#### 4. DISCREPANCY MATRIX (Intent vs. Result)
-- Clinical Level (Truth): ${generatedData?.simulation_debug?.clinical_truth?.expected_service_level || "Unknown"}
-- Billed Level (Actual): ${generatedData?.bill_data?.lineItems?.[0]?.code || "Unknown"}
-- Realistic Score: ${deepDiveData?.realism_score || "N/A"}%
-- AI Fingerprints: ${JSON.stringify(deepDiveData?.ai_fingerprints || [], null, 2)}
-- Detection Status: ${deepDiveData?.other_issues?.some(i => i.type.toUpperCase().includes(errorType.toUpperCase()) || i.explanation.toUpperCase().includes(errorType.toUpperCase()) || i.guardian.toUpperCase().includes("UPCODING")) ? "✅ SUCCESS: Audit Detected Error" : "❌ FAIL: Audit Missed Error"}
-
-#### 5. FORENSIC AUDIT VERDICT
-- Gemini Overview: ${analysisData?.analysis?.explanation || "No overview available"}
-- Forensic Issues Found: ${JSON.stringify(deepDiveData?.other_issues || [], null, 2)}
-- Compliance Findings: ${JSON.stringify(supplementalData?.supplemental_findings || [], null, 2)}
-
-#### 6. THE CHALLENGE (NOTE: IF THE BILL IS ALREADY VERY GOOD, DO NOTHING)
-Analyze the discrepancy between the Intent and the Audit. If the generator produced a highly realistic bill that correctly triggered the forensic findings without unintended "AI tells" or logic gaps, then **DO NOTHING**.
-
-Otherwise, look specifically for:
-- AI Laziness (Lazy coding, reused prices)
-- Logic Gaps (Audit finding errors that weren't intended)
-- Consistency Breaks (Dates/Math mismatches)
-
-Please propose specific code or prompt hardenings to resolve these issues.
-
-#### 7. 🚨 BKM CODING PRINCIPLES (MANDATORY FOR ALL FIXES)
-When proposing fixes, you MUST adhere to these Best Known Methods:
-
-**PRICING METHODOLOGY**:
-1. **NO HARDCODED BENCHMARKS**: Never add static price tables or Medicare rate constants. These become outdated and can't cover all specialties.
-2. **DYNAMIC MEDICARE LOOKUP**: Ask the AI to look up ONLY the Medicare rate. Do NOT let the AI calculate the final price.
-3. **DETERMINISTIC PRICE CALCULATION**: The final price MUST be calculated in CODE (not AI) using:
-   - **Self-Pay**: \`medicareRate × (1.25 + random(0.15))\` → Results in 1.25x-1.40x Medicare (safety margin under 1.5x)
-   - **Insured**: \`medicareRate × (2.0 + random(0.8))\` → Results in 2.0x-2.8x Medicare
-4. **NEVER LET AI SET PRICES**: When asked for prices, AI will lie about Medicare rates to justify inflated prices. Calculate price in code.
-5. **NEVER USE "CHARGEMASTER" TERMINOLOGY**: The word "chargemaster" triggers AI hallucinations.
-
-**ARCHITECTURE** (server.js \`generateItemPrice\`):
-\`\`\`javascript
-// AI ONLY looks up Medicare rate
-const medicareRate = await askAI("What is the Medicare rate for code X?");
-// Price is calculated DETERMINISTICALLY in code
-const multiplier = isSelfPay ? (1.30 + Math.random() * 0.15) : (2.0 + Math.random() * 0.8);
-const finalPrice = medicareRate * multiplier;
+#### 2. INTERNAL AGENT TELEMETRY (THE "TRUTH")
+\`\`\`json
+${JSON.stringify(report.simulation_telemetry, null, 2)}
 \`\`\`
 
-**ANTI-PATTERNS TO AVOID**:
-- ❌ Asking AI to calculate or return \`unitPrice\` (it will lie)
-- ❌ Adding static lookup tables (e.g., \`MEDICAL_BENCHMARKS = {...}\`)
-- ❌ Asking for "chargemaster" or "hospital list price"
-- ❌ Setting multipliers above 1.5x for Self-Pay (auditor will flag it)
-- ❌ Providing example prices in prompts (AI will anchor to them)
+#### 3. RAW BILL DATA
+\`\`\`json
+${JSON.stringify(report.bill_data, null, 2)}
+\`\`\`
+
+#### 4. GEMINI ANALYSIS OVERVIEW
+\`\`\`json
+${JSON.stringify(report.audit_analysis.gemini_overview, null, 2)}
+\`\`\`
+
+#### 5. 🛡️ COMPLETE FORENSIC AUDIT (9 GUARDIANS + JUDGE)
+\`\`\`json
+${JSON.stringify(report.audit_analysis.forensic_audit, null, 2)}
+\`\`\`
+
+#### 6. 📋 COMPLIANCE SENTINEL FINDINGS
+\`\`\`json
+${JSON.stringify(report.audit_analysis.compliance_sentinel, null, 2)}
+\`\`\`
+
+#### 7. TROUBLESHOOTING INSTRUCTIONS
+Analyze the discrepancy between the **INTENDED ERROR** and the **FORENSIC AUDIT**. 
+- If the auditor correctly caught the error: Is the evidence concise and data-backed?
+- If the auditor missed the error: Did the generator fail to inject it correctly, or is there a 'logic gap' in the guardian?
+- Check for "AI Fingerprints" or "Lazy Coding" in the raw bill.
+
+Please propose specific code or prompt hardenings to resolve any identified issues. 
+DO NOT modify logic unless a clear gap is found.
 `;
         navigator.clipboard.writeText(hardeningPrompt);
-        alert("✅ AI Hardening Report copied to clipboard! Paste it back to Antigravity to improve the generator.");
+        alert("🚨 COMPLETE TROUBLESHOOTING DATA COPIED!\n\nAll Agent Truths, Raw Bill, Analysis, and Guardian Audit results are on your clipboard. Paste this to Antigravity for hardening.");
     };
 
     const handleQuickLoad = () => {
@@ -317,6 +322,7 @@ const finalPrice = medicareRate * multiplier;
             setSpecialty(mappedSpec);
             setPayerType(mappedPayer);
             setErrorType(mappedError);
+            setModifiedHtml(null); // Clear edits on quick load
 
             // Validate complexity for specialty
             const allowed = getAvailableComplexities(mappedSpec);
@@ -343,7 +349,14 @@ const finalPrice = medicareRate * multiplier;
             typePrefix = 'FMBM';
         }
 
-        const docHtml = renderToStaticMarkup(template);
+        let docHtml;
+        if (modifiedHtml) {
+            docHtml = modifiedHtml;
+        } else if (isEditing && previewRef.current) {
+            docHtml = previewRef.current.innerHTML;
+        } else {
+            docHtml = renderToStaticMarkup(template);
+        }
         const fullHtml = `
         <!DOCTYPE html>
         <html>
@@ -398,27 +411,62 @@ const finalPrice = medicareRate * multiplier;
         if (!analysisData || !generatedData) return;
 
         const content = `
-GEMINI ANALYSIS REPORT
-----------------------
-Bill Name: ${generatedData.billName}
-Date: ${new Date().toLocaleString()}
+FAIRMEDBILL FORENSIC AUDIT REPORT
+=================================
+Bill Reference: ${generatedData.billName}
+Export Date:    ${new Date().toLocaleString()}
 
-SCENARIO: ${generatedData.simulation_debug?.scenario_settings?.errorType || errorType}
-SPECIALTY: ${generatedData.simulation_debug?.scenario_settings?.specialty || specialty}
-PAYER: ${generatedData.simulation_debug?.scenario_settings?.payerType || payerType}
+1. SCENARIO OVERVIEW
+--------------------
+Expected Error: ${generatedData.simulation_debug?.scenario_settings?.errorType || errorType}
+Specialty:      ${generatedData.simulation_debug?.scenario_settings?.specialty || specialty}
+Payer Type:     ${generatedData.simulation_debug?.scenario_settings?.payerType || payerType}
+Complexity:     ${complexity}
 
-CERTAINTY: ${analysisData.analysis.certainty_score}% (${analysisData.analysis.certainty_label})
-
-EXPLANATION:
+2. INITIAL GENIE ANALYSIS (VERIFICATION)
+----------------------------------------
+Detection Certainty: ${analysisData.analysis.certainty_score}% (${analysisData.analysis.certainty_label})
+Explanation:
 ${analysisData.analysis.explanation}
 
-OTHER ISSUES FOUND:
+Initial Flagged Issues:
 ${analysisData.analysis.other_errors_found && analysisData.analysis.other_errors_found.length > 0
                 ? analysisData.analysis.other_errors_found.map(e => `• ${e}`).join('\n')
-                : 'None detected.'}
+                : 'None detected in initial sweep.'}
 
-----------------------
-Generated by FairMedBill Mock Gen V2.7
+3. 🛡️ FORSENIC DEEP DIVE AUDIT
+------------------------------
+Overall Health Score: ${deepDiveData?.health_score !== undefined ? deepDiveData.health_score + '%' : 'N/A'}
+Financial Realism:    ${deepDiveData?.realism_score !== undefined ? deepDiveData.realism_score + '%' : 'N/A'}
+
+Executive Summary:
+"${deepDiveData?.executive_summary || 'No summary provided.'}"
+
+Detailed Overcharge Findings:
+${deepDiveData?.other_issues && deepDiveData.other_issues.length > 0
+                ? deepDiveData.other_issues.map(err => `
+[${err.guardian}] ${err.type} (${err.severity.toUpperCase()})
+- EXPLANATION: ${err.explanation}
+- EST. OVERCHARGE: ${err.overcharge_potential || '$0.00'}
+`).join('\n')
+                : 'No evidence-based overcharges detected by the 9 Guardians.'}
+
+4. 📋 COMPLIANCE & ADMIN SUPPLEMENTAL
+--------------------------------------
+${supplementalData?.supplemental_findings && supplementalData.supplemental_findings.length > 0
+                ? supplementalData.supplemental_findings.map(f => `
+[${f.category}] ${f.issue} (${f.severity.toUpperCase()})
+- IMPACT: ${f.impact}
+`).join('\n')
+                : 'No compliance or administrative issues detected.'}
+
+5. AI FINGERPRINTS & TELEMETRY
+------------------------------
+Identified Patterns: ${JSON.stringify(deepDiveData?.ai_fingerprints || [], null, 2)}
+
+--------------------------------------
+Generated by FairMedBill Forensic Auditor Engine V2.8
+======================================
         `.trim();
 
         const blob = new Blob([content], { type: 'text/plain' });
@@ -707,6 +755,21 @@ Generated by FairMedBill Mock Gen V2.7
                                     </div>
                                 )}
 
+                                {/* GUARDIAN SCORECARD (V2.2) */}
+                                {deepDiveData?.guardian_results && (
+                                    <div className="mb-3">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5 px-1">Guardian Scorecard</span>
+                                        <div className="grid grid-cols-3 gap-1">
+                                            {deepDiveData.guardian_results.map((g, i) => (
+                                                <div key={i} className="flex items-center gap-1.5 bg-white/50 border border-slate-200 p-1 rounded-sm">
+                                                    <div className={`w-2 h-2 rounded-full shrink-0 ${g.status === 'PASS' ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : g.status === 'FAIL' ? 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]' : 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]'}`}></div>
+                                                    <span className="text-[9px] font-bold text-slate-600 truncate uppercase tracking-tighter" title={g.evidence}>{g.guardian}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div>
                                     <span className="text-indigo-600 font-bold text-xs block mb-1.5 flex items-center gap-1">
                                         🛡️ Forensic Overcharge Audit
@@ -866,8 +929,29 @@ Generated by FairMedBill Mock Gen V2.7
             <div className="w-2/3 bg-slate-200 rounded-xl shadow-inner p-8 overflow-y-auto flex flex-col">
                 {generatedData?.billName && (
                     <div className="mb-4 bg-white px-4 py-2 rounded-lg shadow-sm border-l-4 border-blue-600 flex justify-between items-center">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Statement:</span>
-                        <span className="text-sm font-mono font-bold text-blue-700">{generatedData.billName}</span>
+                        <div className="flex items-center gap-4">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Statement:</span>
+                            <span className="text-sm font-mono font-bold text-blue-700">{generatedData.billName}</span>
+                        </div>
+                        <button
+                            onClick={() => {
+                                if (isEditing && previewRef.current) {
+                                    setModifiedHtml(previewRef.current.innerHTML);
+                                }
+                                setIsEditing(!isEditing);
+                            }}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-2 ${isEditing ? 'bg-emerald-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'}`}
+                        >
+                            {isEditing ? '💾 Apply Edits' : modifiedHtml ? '✏️ Continue Editing' : '✏️ Modify Text'}
+                        </button>
+                        {modifiedHtml && !isEditing && (
+                            <button
+                                onClick={() => setModifiedHtml(null)}
+                                className="text-[10px] text-red-500 hover:underline font-bold"
+                            >
+                                Reset Original
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -899,10 +983,26 @@ Generated by FairMedBill Mock Gen V2.7
 
                 {generatedData ? (
                     // Render the visual preview
-                    <div className={`transform transition-all origin-center bg-white shadow-xl ${scanMode ? 'rotate-1 blur-[0.3px]' : ''}`}>
-                        {viewMode === 'BILL' && <BillTemplate data={generatedData.bill_data} />}
-                        {viewMode === 'GFE' && <GFETemplate data={gfeData} />}
-                        {viewMode === 'MR' && <MedicalRecordTemplate data={mrData} />}
+                    <div
+                        ref={previewRef}
+                        contentEditable={isEditing}
+                        suppressContentEditableWarning={true}
+                        onBlur={() => {
+                            if (isEditing && previewRef.current) {
+                                setModifiedHtml(previewRef.current.innerHTML);
+                            }
+                        }}
+                        className={`transform transition-all origin-center bg-white shadow-xl ${scanMode ? 'rotate-1 blur-[0.3px]' : ''} ${isEditing ? 'outline-4 outline-blue-500 shadow-2xl z-10 cursor-text' : 'outline-none'}`}
+                    >
+                        {modifiedHtml && !isEditing ? (
+                            <div dangerouslySetInnerHTML={{ __html: modifiedHtml }} />
+                        ) : (
+                            <>
+                                {viewMode === 'BILL' && <BillTemplate data={generatedData.bill_data} />}
+                                {viewMode === 'GFE' && <GFETemplate data={gfeData} />}
+                                {viewMode === 'MR' && <MedicalRecordTemplate data={mrData} />}
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400">

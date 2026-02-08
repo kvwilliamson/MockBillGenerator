@@ -101,8 +101,8 @@ export const BillTemplate = ({ data }) => {
                         {typeof provider === 'object' ? provider.name : provider}
                     </h1>
                     <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
-                    {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>Contact: {provider.contact}</p>}
-                    <p style={{ margin: '5px 0' }}>NPI: {npi} | Tax ID: {taxId}</p>
+                    {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>{data.labels?.contact || 'Contact'}: {provider.contact}</p>}
+                    <p style={{ margin: '5px 0' }}>{data.labels?.npi || 'NPI'}: {npi} | {data.labels?.taxId || 'Tax ID'}: {taxId}</p>
                     <h2 style={{ marginTop: '15px', fontSize: '18px', background: '#eee', display: 'inline-block', padding: '5px 20px' }}>PATIENT STATEMENT</h2>
                 </div>
             ) : (
@@ -111,15 +111,15 @@ export const BillTemplate = ({ data }) => {
                         <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '24px' }}>
                             {typeof provider === 'object' ? provider.name : provider}
                         </h1>
-                        <p style={{ margin: '5px 0' }}>NPI: {npi} | Tax ID: {taxId}</p>
+                        <p style={{ margin: '5px 0' }}>{data.labels?.npi || 'NPI'}: {npi} | {data.labels?.taxId || 'Tax ID'}: {taxId}</p>
                         <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
-                        {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>Customer Service: {provider.contact}</p>}
+                        {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>{data.labels?.contact || 'Customer Service'}: {provider.contact}</p>}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <h2 style={{ margin: 0, color: theme.id === 'urgent' ? theme.primaryColor : '#333' }}>PATIENT STATEMENT</h2>
-                        <p style={{ fontSize: '14px', fontWeight: 'bold' }}>Account: {accountNumber}</p>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold' }}>{data.labels?.account || 'Account'}: {accountNumber}</p>
                         <div style={{ border: '1px solid #999', padding: '2px 5px', display: 'inline-block', marginTop: '5px', fontSize: '10px' }}>
-                            TOB: {data.tob || '131'}
+                            {data.labels?.tob || 'TOB'}: {data.tob || '131'}
                         </div>
                     </div>
                 </div>
@@ -128,33 +128,33 @@ export const BillTemplate = ({ data }) => {
             {/* Summary Box */}
             <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f9f9f9', padding: '15px', border: '1px solid #ddd', marginBottom: '20px' }}>
                 <div>
-                    <div><strong>PATIENT:</strong> {patientName}</div>
-                    <div><strong>DOB:</strong> {patientDOB}</div>
+                    <div><strong>{data.labels?.patient || 'PATIENT'}:</strong> {patientName}</div>
+                    <div><strong>{data.labels?.dob || 'DOB'}:</strong> {patientDOB}</div>
                     {/* Only show Admit/Disch for Inpatient or if dates differ significantly. 
                         For Clinic/Office (Rev 0510, Single Day), we just show Date of Service or suppress. 
                         Let's suppress if admissionDate == dischargeDate to look more like a clinic statement */}
                     {admissionDate !== dischargeDate ? (
                         <div>
-                            <strong>ADMIT:</strong> {admissionDate} {data.admissionTime && <span style={{ fontSize: '10px' }}>({data.admissionTime})</span>} &mdash;
+                            <strong>{data.labels?.dos || 'DATE OF SERVICE'}:</strong> {admissionDate} {data.admissionTime && <span style={{ fontSize: '10px' }}>({data.admissionTime})</span>} &mdash;
                             <strong> DISCH:</strong> {dischargeDate} {data.dischargeTime && <span style={{ fontSize: '10px' }}>({data.dischargeTime})</span>}
                         </div>
                     ) : (
                         <div>
-                            <strong>DATE OF SERVICE:</strong> {admissionDate}
+                            <strong>{data.labels?.dos || 'DATE OF SERVICE'}:</strong> {admissionDate}
                         </div>
                     )}
                     {data.attendingPhysician && (
                         <div style={{ marginTop: '5px', fontSize: '11px' }}>
-                            <strong>Attending:</strong> {data.attendingPhysician} (NPI: {data.attendingNpi})
+                            <strong>{data.labels?.attending || 'Attending'}:</strong> {data.attendingPhysician} ({data.labels?.npi || 'NPI'}: {data.attendingNpi})
                         </div>
                     )}
-                    <div style={{ maxWidth: '400px', marginTop: '5px' }}><strong>DIAGNOSIS (ICD-10):</strong><br />{icd10}</div>
-                    <div><strong>INSURANCE:</strong> {insurance} <span style={{ fontSize: '10px', fontStyle: 'italic' }}>({data.insuranceStatus || 'Active'})</span></div>
+                    <div style={{ maxWidth: '400px', marginTop: '5px' }}><strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />{icd10}</div>
+                    <div><strong>{data.payerLabel || 'INSURANCE'}:</strong> {insurance} {data.insuranceStatus && <span style={{ fontSize: '10px', fontStyle: 'italic' }}>({data.insuranceStatus})</span>}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div><strong>Statement Date:</strong> {statementDate}</div>
-                    <div><strong>Statement ID:</strong> {data.statementId || `ST-${Math.random().toString(36).substr(2, 6).toUpperCase()}`}</div>
-                    <div style={{ marginTop: '10px', fontSize: '14px', background: '#ffff0050', padding: '2px' }}><strong>Due Date:</strong> {data.dueDate || "Upon Receipt"}</div>
+                    <div><strong>{data.labels?.statementDate || 'Statement Date'}:</strong> {statementDate}</div>
+                    <div><strong>{data.labels?.statementId || 'Statement ID'}:</strong> {data.statementId || `ST-${Math.random().toString(36).substr(2, 6).toUpperCase()}`}</div>
+                    <div style={{ marginTop: '10px', fontSize: '14px', background: '#ffff0050', padding: '2px' }}><strong>{data.labels?.dueDate || 'Due Date'}:</strong> {data.dueDate || "Upon Receipt"}</div>
                 </div>
             </div>
 
@@ -162,13 +162,13 @@ export const BillTemplate = ({ data }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                     <tr style={{ background: theme.secondaryColor, borderBottom: `2px solid ${theme.primaryColor}` }}>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor, borderRadius: `${theme.borderRadius} 0 0 ${theme.borderRadius}` }}>Date</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>Rev Code</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>Code / Mod</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>Description</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor }}>Qty</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor }}>Price</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor, borderRadius: `0 ${theme.borderRadius} ${theme.borderRadius} 0` }}>Total</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor, borderRadius: `${theme.borderRadius} 0 0 ${theme.borderRadius}` }}>{data.labels?.gridDate || 'Date'}</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.revCode || 'Rev Code'}</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridCode || 'Code / Mod'}</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridDesc || 'Description'}</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor }}>{data.labels?.qty || 'Qty'}</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor }}>{data.labels?.price || 'Price'}</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor, borderRadius: `0 ${theme.borderRadius} ${theme.borderRadius} 0` }}>{data.labels?.total || 'Total'}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -191,7 +191,7 @@ export const BillTemplate = ({ data }) => {
                 <table style={{ width: '350px' }}>
                     <tbody>
                         <tr>
-                            <td style={{ padding: '5px' }}>Total Charges:</td>
+                            <td style={{ padding: '5px' }}>{data.labels?.totalCharges || 'Total Charges'}:</td>
                             <td style={{ padding: '5px', textAlign: 'right' }}>{formatCurrency(subtotal)}</td>
                         </tr>
                         {/* Dynamic Adjustment Breakdown */}
@@ -222,7 +222,7 @@ export const BillTemplate = ({ data }) => {
                         )}
 
                         <tr>
-                            <td style={{ padding: '5px', fontWeight: 'bold' }}>Total Adjustments:</td>
+                            <td style={{ padding: '5px', fontWeight: 'bold' }}>{data.labels?.adjustments || 'Total Adjustments'}:</td>
                             <td style={{ padding: '5px', textAlign: 'right' }}>{formatCurrency(-Math.abs(adjustments))}</td>
                         </tr>
                         {/* Only show Insurance Paid if not Self-Pay AND non-zero, or if insurance actually paid something */}
@@ -233,7 +233,7 @@ export const BillTemplate = ({ data }) => {
                             </tr>
                         )}
                         <tr style={{ background: '#eee', fontWeight: 'bold', fontSize: '14px', borderTop: '2px solid #ccc' }}>
-                            <td style={{ padding: '10px' }}>PATIENT BALANCE:</td>
+                            <td style={{ padding: '10px' }}>{data.labels?.balance || 'PATIENT BALANCE'}:</td>
                             <td style={{ padding: '10px', textAlign: 'right' }}>{formatCurrency(grandTotal)}</td>
                         </tr>
                     </tbody>
@@ -244,7 +244,7 @@ export const BillTemplate = ({ data }) => {
             <div style={{ marginTop: '40px', border: '2px dashed #999', padding: '20px', pageBreakInside: 'avoid' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                        <strong>Please detach and return with payment</strong><br />
+                        <strong>{data.labels?.coupon || 'Please detach and return with payment'}</strong><br />
                         {patientName}<br />
                         Electronic billing statement requested
                     </div>
@@ -254,7 +254,7 @@ export const BillTemplate = ({ data }) => {
                             {/* Mock Barcode */}
                             █║▌│█│║▌║││█║▌║▌║
                         </div>
-                        Amount Enclosed: $__________
+                        {data.labels?.amountEnclosed || 'Amount Enclosed'}: $__________
                         <div style={{ border: '1px solid #000', height: '30px', width: '150px', marginTop: '5px' }}></div>
                     </div>
                 </div>
@@ -269,18 +269,24 @@ export const BillTemplate = ({ data }) => {
             <div style={{ marginTop: '20px', fontSize: '9px', color: '#666', borderTop: '1px solid #ccc', paddingTop: '10px' }}>
                 <strong>IMPORTANT:</strong> This balance may be subject to collections if unpaid within 90 days. Charges are subject to review and correction.
                 <br />
-                <strong>FINANCIAL ASSISTANCE:</strong> You may be eligible for financial assistance or charity care under the No Surprises Act.
-                Contact us at 1-800-555-0199 or visit www.mgh-pay.com/assist for a summary of your rights.
-                {data.disclaimers && Array.isArray(data.disclaimers) ? (
-                    <div style={{ marginTop: '10px' }}>
-                        {data.disclaimers.map((d, i) => <div key={i}>{d}</div>)}
+                {data.insuranceStatus?.includes('Self-Pay') ? (
+                    <div style={{ background: '#fef3c7', padding: '10px', border: '1px solid #f59e0b', marginTop: '10px', borderRadius: '4px', color: '#92400e' }}>
+                        <strong>{data.labels?.gfe || 'NO SURPRISES ACT PROTECTIONS'}:</strong> As a self-pay patient, you have the right to a Good Faith Estimate. If your total charges exceed your estimate by $400 or more, you may initiate a dispute resolution process.
                     </div>
                 ) : (
-                    typeof provider === 'object' && provider.disclaimers && Array.isArray(provider.disclaimers) && (
-                        <div style={{ marginTop: '10px' }}>
-                            {provider.disclaimers.map((d, i) => <div key={i}>{d}</div>)}
-                        </div>
-                    )
+                    <>
+                        <strong>{data.labels?.assistance || 'FINANCIAL ASSISTANCE'}:</strong> Contact us at 1-800-555-0199 or visit www.mgh-pay.com/assist for a summary of your rights.
+                    </>
+                )}
+                {data.disclaimers && Array.isArray(data.disclaimers) && (
+                    <div style={{ marginTop: '10px', fontWeight: 'bold', color: '#444' }}>
+                        {data.disclaimers.map((d, i) => <div key={i} style={{ marginBottom: '4px' }}>• {d}</div>)}
+                    </div>
+                )}
+                {typeof provider === 'object' && provider.disclaimers && Array.isArray(provider.disclaimers) && (
+                    <div style={{ marginTop: '10px' }}>
+                        {provider.disclaimers.map((d, i) => <div key={i}>{d}</div>)}
+                    </div>
                 )}
                 {data.footerNote && (
                     <div style={{ marginTop: '10px', fontStyle: 'italic' }}>

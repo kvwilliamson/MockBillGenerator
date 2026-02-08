@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { runDeepDiveAudit } from './guardians/orchestrator.js';
 
 // Load local ENV
 dotenv.config();
@@ -25,6 +26,71 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const MODEL_NAME = process.env.AI_MODEL_DEEP_ANALYSIS || 'gemini-1.5-flash';
 
 console.log(`[Server] Using AI Model: ${MODEL_NAME}`);
+
+// --- HELPERS: Pricing & Coding Baselines ---
+
+/**
+ * Static "Ideal" Medicare rates or work-baselines for common codes.
+ * Used for sanity checking AI lookups and providing fallbacks.
+ */
+function getBasePrice(cpt) {
+    const code = String(cpt);
+    // E/M (Emergency Dept)
+    if (code.startsWith('99285')) return 380;
+    if (code.startsWith('99284')) return 230;
+    if (code.startsWith('99283')) return 150;
+    if (code.startsWith('99282')) return 80;
+    if (code.startsWith('99281')) return 40;
+
+    // E/M (Office/Clinic)
+    if (code.startsWith('99215')) return 185;
+    if (code.startsWith('99214')) return 130;
+    if (code.startsWith('99213')) return 95;
+    if (code.startsWith('99212')) return 65;
+    if (code.startsWith('99205')) return 220;
+    if (code.startsWith('99204')) return 170;
+
+    // Radiology
+    if (code.startsWith('741')) return 280; // CT Abdomen
+    if (code.startsWith('71046')) return 35; // CXR 2 view
+    if (code.startsWith('71045')) return 32; // CXR 1 view
+    if (code.startsWith('73610')) return 36; // Ankle X-ray
+    if (code.startsWith('73630')) return 40; // Foot X-ray
+    if (code.startsWith('7')) return 45;    // Default Rads
+
+    // Lab
+    if (code.startsWith('87081')) return 18.74; // Throat Culture (Specific BKM from audit)
+    if (code.startsWith('87')) return 20;    // Rapid Tests
+    if (code.startsWith('85025')) return 12; // CBC
+    if (code.startsWith('80053')) return 15; // CMP
+    if (code.startsWith('8100')) return 8;   // Urinalysis
+    if (code.startsWith('86592')) return 22; // Strep
+    if (code.startsWith('8')) return 15;     // Default Lab
+
+    // Procedures
+    if (code.startsWith('131')) return 180; // Complex Repair
+    if (code.startsWith('12011')) return 43; // Simple Repair
+    if (code.startsWith('9637')) return 35; // Injection Service
+    if (code.startsWith('1')) return 50;    // Default Proc
+
+    // Cardiology
+    if (code.startsWith('93000')) return 45; // ECG
+
+    // Lab Handling
+    if (code.startsWith('9900')) return 15; // Specimen Handling
+
+    // Medications / Misc
+    if (code.startsWith('J') || code.startsWith('90')) {
+        const isExpensive = code.startsWith('J9') || code.startsWith('J08') || code.startsWith('J3');
+        if (isExpensive) return 120 + (Math.random() * 200);
+        return 8 + (Math.random() * 15); // Generic Med Base ($8-$23)
+    }
+    if (code === '0250') return 15; // Generic Oral Med
+    if (code === '99000') return 9; // Handling Fee
+
+    // Default catch-all (Randomized to prevent bizarre identical rows)
+    return 45 + (Math.random() * 80);
+}
 
 // --- Routes ---
 
@@ -63,13 +129,14 @@ async function generateDraftBill(params) {
              - **SETTING**: MUST be Inpatient Hospital.
              - **DURATION**: Multi-day stay (3-5 days).
              - **CODES**: Initial Hospital (9922x) -> Subsequent (9923x).
-             - **MUST** include Room & Board (Rev 0110-0120).
-             - **VOLUME**: 10+ line items.
-
-        **ERROR REQUESTED**: ${errorType}
-        - If Error is UPCODING: Use a CPT higher than the Diagnosis supports.
-        - If Error is UNBUNDLING: Split panel components.
-        - If Error is CLEAN: Make it look standard.
+        ** INSTRUCTIONS **:
+        1.  ** CLINICAL ALIGNMENT **: Every code MUST be directly supported by the visit note.
+        2.  ** CASE STUDY **: If a patient has a simple sore throat (Pharyngitis J02.9) and is stable, do NOT use 99213/99283 unless there's a specific complication. Use 99212/99282.
+            - If ${errorType} === 'UPCODING': You MUST intentionally select a code exactly ONE or TWO levels higher than supported (e.g., use 99215 for a Level 2 encounter). 
+            - If ${errorType} === 'DUPLICATE': You MUST repeat one of the service line items (e.g., bill for the same Lab test twice on the same date).
+            - If ${errorType} === 'PHANTOM_BILLING': Add a line item for a high-cost service (e.g., CT Scan) that is NOT mentioned in the clinical scenario.
+            - If ${errorType} === 'CLEAN': Be extremely conservative. Do not upcode!
+        4.  ** NO "AI TELLS" **: Do not use perfectly rounded quantities like 10.0 or prices. Use messy, realistic billing codes.
 
         RETURN JSON: { "bill_data": { ...standard structure... } }
     `;
@@ -190,9 +257,9 @@ async function auditAndFinalizeBill(draftBill, params) {
         2. **LOGIC VERIFICATION ("THE GOTCHA" CHECK)**: 
            - **CRITICAL**: Check the 'errorType': **"${errorType}"**.
            - If errorType is NOT 'CLEAN', **DO NOT FIX** the specific error requested! You MUST PRESERVE the mismatch.
-           - **UPCODING**: If requested, ensure the CPT code is ONE LEVEL HIGHER than the description/diagnosis supports. (e.g. 99285 for a Cough).
-             - If the draft has 99284, CHANGE IT TO 99285.
-           - If UPCODING, the bill MUST show a higher level code than supported. If it looks correct, **Introduction an error**.
+           - **UPCODING**: Ensure CPT is 1 level higher than supported.
+           - **DUPLICATE**: Repeat one line item twice.
+           - **PHANTOM_BILLING**: Add an unrelated expensive service.
            - If errorType is 'CLEAN', then fix ALL errors to make it perfect.
         3. **PAYER ENFORCEMENT**:
            - If Payer is "High-Deductible", FORCE 'insPaid' to 0 and 'grandTotal' to be high.
@@ -403,7 +470,9 @@ app.post('/generate-data', async (req, res) => {
         }
 
         // 2. Math Enforcement
-        if (errorType && !errorType.toLowerCase().includes('math')) {
+        // CRITICAL: If the intended error is a math/balance error, DO NOT "heal" it here.
+        const isMathError = errorType && (errorType.toLowerCase().includes('math') || errorType.toLowerCase().includes('balance'));
+        if (errorType && !isMathError) {
             const bill = data.bill_data;
             const charges = bill.subtotal || 0;
             const adj = Math.abs(bill.adjustments || 0);
@@ -589,79 +658,29 @@ async function analyzeBill(billData, errorType, gfeData = null, mrData = null, g
 }
 
 // --- AGENT 6: THE DEEP DIVE ANALYST (Other Issues Pass) ---
+// --- AGENT 14: THE FORENSIC AUDITOR (V2.2 - Modular Orchestrator) ---
 async function deepDiveAnalysis(billData, params, gfeData = null, mrData = null) {
-    const { specialty, errorType, complexity, payerType } = params;
+    const { specialty, payerType } = params;
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-    // BKM: Await the dynamic benchmark fetch before building the prompt
-    const pricingBenchmarks = await getPricingBenchmarks(billData.lineItems);
+    // Await the dynamic benchmark fetch (Needed for Price Sentry)
+    const actuaryData = await getPricingBenchmarks(billData.lineItems, payerType, billData.provider);
 
-    const prompt = `
-        You are "The Forensic Auditor". Your goal is to find EVERY possible error on this medical bill, specifically focusing on the 9 Core Guardians of the FairMedBill auditing engine.
-        
-        **CRITICAL RULE**: Do NOT speculate or guess. Every issue listed MUST be supported by specific, identifiable evidence within the provided data.
-
-        **CONTEXT**:
-        - Specialty: ${specialty}
-        - Expected Primary Error: ${errorType}
-        - Payer: ${payerType}
-        - Complexity: ${complexity}
-
-        **DATA INPUTS**:
-        1. **BILL DATA**: ${JSON.stringify(billData)}
-        2. **PRICING BENCHMARKS (ACTUARY)**: ${JSON.stringify(pricingBenchmarks)}
-        ${gfeData ? `3. **GOOD FAITH ESTIMATE**: ${JSON.stringify(gfeData)}` : ''}
-        ${mrData ? `4. **MEDICAL RECORD**: ${JSON.stringify(mrData)}` : ''}
-
-        **TASK**:
-        Perform an exhaustive audit across the **9 GUARDIAN CATEGORIES**:
-        1. **Duplicate Guardian**: Check for identical CPT codes/descriptions on the same date.
-        2. **Math Guardian**: Check if Qty * Unit Price = Total, and if line items sum to the correct Grand Total.
-        3. **Upcoding Guardian**: **STRICT CHECK**. If Complexity is "Low" and Specialty is "ER", the E/M code MUST be 99281 or 99282. Any 99283/4/5 is a HIGH SEVERITY UPCODING ERROR.
-        4. **Unbundling Guardian**: Check if lab panels or surgical components are fragmented into separate expensive charges.
-        5. **Date Guardian**: Check for admission/discharge order, future dates, or services billed before admission.
-        6. **Price Sentry (Hardened)**: Audit prices against the provided **REALITY BENCHMARKS**. 
-           - **PRICING VS CLINICAL**: Distinguish between an 'Overpriced Line Item' (Unit Price is too high) and a 'Clinically Unjustified Item' (The code itself shouldn't be there or is the wrong level). Both are OVERCHARGES.
-           - **EXCESSIVE**: Flag as 'Excessive' if the price is >5x Medicare. **SELF-PAY EXCEPTION**: For Self-Pay, flag anything >1.5x Medicare as 'Excessive' as this represents a fair-market overcharge for the uninsured.
-        7. **GFE Guardian**: If GFE provided, check if the bill exceeds the estimate by >$400 (No Surprises Act violation).
-        8. **Balance Billing Guardian**: Scan for out-of-network traps or patient responsibility errors on emergency visits.
-        9. **Record Match Guardian**: If MR provided, ensure every billed item is actually documented in the medical notes.
-
-        **INSTRUCTIONS**:
-        - **LOGIC SANITY**: Be surgical. If the Pricing Actuary shows a price is within the "Chargemaster Range", it is technically legal, but for Self-Pay, it is still an overcharge if >1.5x Medicare.
-        - **FORENSIC BRUTALITY**: Act like a hostile insurance adjuster looking for any reason to deny or downcode this bill. Do not be polite.
-        - **AI FINGERPRINTING**: Identify "tells" that suggest this is a synthetic mock bill (e.g. perfect numbering, specific AI phrasing).
-        - Be aggressive and exhaustive but strictly EVIDENCE-BASED.
-        - **CHECKLIST**: 
-           1. Check the 'provider.disclaimers' array. If it has 3+ items, DO NOT flag missing disclaimers. 
-           2. Check the 'provider.tob' field. TOB 131 is correct for ER. 
-           3. Use the 'executive_summary' to show your math (e.g. "$400 / $230 = 1.7x").
-        - Calculate the "Overcharge Potential" based on the billing discrepancy.
-
-        **RETURN JSON**:
-        {
-            "executive_summary": "A 2-3 sentence professional narrative of the audit findings.",
-            "health_score": 0-100, // 100 = Perfect Bill, 0 = Fraudulent/Corrupt
-            "realism_score": 0-100, // 100 = Looks 100% authentic, 0 = Obvious AI halluncination
-            "ai_fingerprints": ["List specific patterns that look synthetic"],
-            "guardian_statuses": [
-                { "guardian": "Guardian Name", "status": "PASS" | "FAIL" | "WARNING" }
-            ],
-            "other_issues": [
-                {
-                    "guardian": "Guardian Name",
-                    "type": "Error Type",
-                    "explanation": "Evidence-based forensic explanation",
-                    "severity": "High" | "Medium" | "Low",
-                    "overcharge_potential": "Estimated $ amount"
-                }
-            ]
-        }
-    `;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return parseAndValidateJSON(text.replace(/[^\x00-\x7F]/g, ""));
+    // Invoke the Modular Orchestrator
+    try {
+        return await runDeepDiveAudit(
+            billData,
+            mrData,
+            actuaryData,
+            gfeData,
+            params,
+            model,
+            parseAndValidateJSON
+        );
+    } catch (error) {
+        console.error("[Audit Cluster Failure]", error);
+        throw error;
+    }
 }
 
 // --- AGENT 7: THE COMPLIANCE SENTINEL (Supplemental Audit) ---
@@ -672,10 +691,17 @@ async function supplementalAudit(billData, existingIssues) {
         You are "The Compliance Sentinel". Your goal is to find non-financial errors on this medical bill.
         
         **CRITICAL**: DO NOT REPEAT issues related to pricing, overcharges, or the 9 Guardians.
-        Focus on:
-        1. **Administrative Errors**: Typos in names, invalid NPI patterns, missing Tax IDs.
-        2. **Compliance**: Missing legal disclaimers, incorrect TOB/Specialty alignment, formatting oddities.
-        3. **Identity**: Cross-referencing patient details for inconsistencies.
+        
+        **SYSTEM TRUTHS (MANDATORY)**:
+        1. **TOB 131** is ALWAYS correct and standard for Emergency/Outpatient visits. (DO NOT FLAG).
+        2. **NPIs** must be 10 digits and generally start with '1' or '2'. (DO NOT FLAG if 10 digits).
+        3. **Tax IDs** (EINs) are standard in the XX-XXXXXXX format. (DO NOT FLAG).
+        4. **Clinical Scaling**: ER Visit levels (99281-99285) and Office levels (99202-99215) must scale reasonably with the documented severity. High complexity warrants higher levels.
+        
+        **FOCUS ON**:
+        1. **Administrative Errors**: Typos in names, non-10-digit NPIs.
+        2. **Compliance**: Missing legal disclaimers.
+        3. **Identity**: Cross-referencing patient details for inconsistency.
 
         **DATA**:
         - Bill: ${JSON.stringify(billData)}
@@ -779,307 +805,315 @@ const ABB_MAP = {
 };
 
 // 1. THE CLINICAL ARCHITECT ("The Doctor")
-async function generateClinicalArchitect(params) {
-    const { specialty, errorType, complexity } = params;
+// --- AGENT 10: THE CLINICAL ARCHITECT (V2.2 - Identity & Source of Truth) ---
+async function generateClinicalArchitect(params, scoutContext) {
+    const { specialty, errorType, complexity, randomSeed } = params;
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
     const prompt = `
-        You are "The Architect".Create the "SOURCE OF TRUTH" for a mock medical bill.
-        
-        ** SETTINGS **:
-    - Specialty: ${specialty}
-    - Complexity: ${complexity}
-    - Intended Scenario: "${errorType}"
+        You are "The Architect". Create the "SOURCE OF TRUTH" medical record for a mock bill. 
+        Your goal is to be a perfectly honest, high-fidelity medical record creator.
 
-        ** STRICT COMPLEXITY MAPPING **:
-        - ** Low **: Patient presents for a single, non - emergent issue(e.g., minor wound, cough, suture removal, medication refill).Very minimal workup. ** MAX 3 ORDERS **.
-        - ** Medium **: Complex chronic management flare - up or extended ER observation(e.g., severe abdominal pain, worsening chronic asthma).Multiple labs / imaging.
-        - ** High **: Life - threatening emergency or clinical instability(e.g., ACS / Heart Attack, Stroke, Major Trauma, Sepsis).Extensive workup and critical care.
+        ** INPUTS **:
+        - Facility Context: ${scoutContext.name} (${scoutContext.facilityType}) in ${scoutContext.city}, ${scoutContext.state}
+        - Specialty: ${specialty}
+        - Complexity: ${complexity} (STRICTLY FOLLOW THIS)
+        - Intended Error (FYI ONLY): "${errorType}" (Do NOT write the note to justify this error; the note must be the HONEST truth).
+        - Random Seed: ${randomSeed}
 
         ** INSTRUCTIONS **:
-        4. ** IDENTITY REALISM **: NEVER use "John Doe", "Jane Smith", or other placeholders. Generate a culturally and age-appropriate first and last name from a diverse pool.
-        5. ** CLINICAL FIDELITY **: Only include comorbidities (e.g. Hypertension, Diabetes) in the ICD-10/Truth list if the visit_note actually mentions checking or managing them (e.g. "blood pressure stable", "glucose checked"). DO NOT just list them as filler.
-        6. ** CLINICAL SANITY **: Every ICD-10 code MUST perfectly match the "Assessment" and "HPI". If the injury is on the left knee, YOU MUST use a left-specific ICD-10 (e.g. M17.12). DO NOT use a right-side code for a left-side complaint.
-        7. Write a detailed ** Visit Note ** (HPI, Physical Exam). 
-           - **REALISM**: Use standard medical shorthand (e.g. "Pt reports", "NAD", "PERRLA"). Add clinical measurements where appropriate (e.g. "Lungs: clear vs. scattered rhonchi"). DO NOT make it too clean; include non-essential clinical filler that real doctors write.
-        8. List specific ** Medical Orders ** (e.g. "Order: CBC", "Order: CT Scan").
+        1. **GEOGRAPHIC REALISM**: Generate a patient name, age, and history that reflects the demographics of ${scoutContext.city}, ${scoutContext.state}. 
+        2. **STRICT COMPLEXITY BOUNDARIES**: 
+           - **LOW**: Patient presents for a single, non-emergent issue (e.g., 2-day cough, minor 1cm cut). Minimal vitals, max 2 orders. 
+           - **MEDIUM**: Chronic flare-up or acute pain needing investigation (e.g., 6/10 abdominal pain, stable asthma). Detailed vitals, 3-5 orders.
+           - **HIGH**: Life-threatening or unstable (e.g., Sepsis, Stroke, ACS). Critical vitals, extensive orders.
+        3. **FORENSIC VITALS**: Generate a full vitals block (BP, HR, Temp, SpO2, RR). Ensure the vitals match the ${complexity} level (e.g., SpO2 99% for a cold, 88% for an emergency).
+        4. **LATERALITY**: If a condition involves a limb/organ (Ear, Eye, Kidney, Knee), you MUST pick a side (Left or Right) and keep it consistent.
+        5. **MEDICAL SHORTHAND**: Use standard shorthand (e.g., "Pt is a 62yo F with hx of HLD", "HEENT: NC/AT", "Lungs: CTA").
+        6. **GLOBAL PERIOD TRAP**: If the history suggests a recent surgery (e.g., "Status post appendectomy 5 days ago"), include that in the patient history.
 
-        ** RETURN JSON **:
-    {
-        "clinical_truth": {
-            "patient_demographics": { "name": "String", "age": Number, "gender": "M/F", "history": "String" },
-            "visit_note": { "hpi": "String", "physical_exam": "String", "assessment": "String" },
-            "orders": ["String (Order 1)", "String (Order 2)"],
-                "expected_service_level": "Level X"
+        ** RETURN JSON STRUCTURE **:
+        {
+            "clinical_truth": {
+                "patient": {
+                    "name": "String",
+                    "age": Number,
+                    "gender": "M/F",
+                    "hx": "Brief relevant medical history, including recent surgeries if applicable"
+                },
+                "attending_physician": {
+                    "name": "Full Name, MD/DO",
+                    "npi": "10-digit NPI starting with 1"
+                },
+                "vitals": {
+                    "bp": "XXX/XX",
+                    "hr": "XX",
+                    "rr": "XX",
+                    "temp": "XX.X",
+                    "spo2": "XX%"
+                },
+                "soap_note": {
+                    "hpi": "Detailed narrative of the visit (Who, What, When, Why)",
+                    "physical_exam": "Organ system findings focusing on the specialty",
+                    "assessment": "Specific diagnosis (with ICD-10 description)",
+                    "plan": "Next steps/Orders"
+                },
+                "orders": ["Order 1", "Order 2"],
+                "metadata": {
+                    "complexity_enforced": "${complexity}",
+                    "facility_type": "${scoutContext.facilityType}",
+                    "primary_anatomical_side": "LEFT | RIGHT | N/A (Mandatory if applicable to the specialty)"
+                }
+            }
         }
-    }
     `;
     const result = await model.generateContent(prompt);
     return parseAndValidateJSON(result.response.text());
 }
 
 // 2. THE MEDICAL CODER ("The Error Anchor")
+// --- AGENT 11: THE MEDICAL CODER (V2.2 - The Infiltrator) ---
 async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-    const prompt = `
-        You are "The Medical Coder". 
-        Translate the Clinical Truth into Codes. 
-        ** INTENTIONALLY ** apply the error requested by "${errorType}".
+    // I. CONDITIONAL PROMPTING (BKM: Prevent Instruction Leakage)
+    const villainLogics = {
+        'CLEAN': "Produce a PERFECT, CPC-compliant bill with ZERO errors. Adhere strictly to the Architect's truth and metadata.primary_anatomical_side.",
+        'UPCODING': 'GASLIGHTING: Ignore the "Low" Complexity level. Exaggerate a single Vital Sign (e.g., if HR is 90, claim "Tachycardia requiring stabilization") to justify a 99284 or 99285.',
+        'RECORD_MISMATCH': 'LATERALITY FLIP: Intentionally override the Architect\'s metadata.primary_anatomical_side. If the record says "Left", you must code for "Right" in the CPT description.',
+        'GLOBAL_PERIOD': 'TEMPORAL TRAP: If the "hx" mentions a recent surgery (<90 days), ignore the post-op status and bill for a full-priced Evaluation & Management visit anyway.',
+        'UNBUNDLING': 'FRAGMENTATION: If the Architect orders a comprehensive panel (like a CMP 80053), "fragment" it. Bill for 5-8 individual components separately to inflate the cost.',
+        'PHANTOM_BILLING': 'PHANTOM: Add an expensive service (like CT Scan 74177) that is NOT in the Architect\'s "orders".',
+        'DUPLICATE': 'DOUBLE-BILL: Repeat one valid lab or procedure twice on the same date.',
+        'BALANCE_MISMATCH': 'MATH TRAP: Set the Grand Total higher than the sum of line items to simulate a "Process Failure".'
+    };
 
-        ** CLINICAL TRUTH **:
+    const specificLogic = villainLogics[errorType] || villainLogics['CLEAN'];
+
+    const prompt = `
+        You are "The Medical Coder (The Infiltrator)". Your task is to translate the "Clinical Truth" into official billing codes (CPT and ICD-10).
+        
+        ** GOAL **: ${errorType === 'CLEAN' ? 'Produce a CLEAN bill.' : `INTENTIONALLY apply error: "${errorType}".`}
+
+        ** CLINICAL TRUTH (THE ARCHITECT'S BASELINE) **:
         ${JSON.stringify(clinicalTruth)}
         
-        ** SPECIALTY CONSTRAINTS **:
-    - Specialty: "${specialty}"
-        - ** Emergency Medicine **: MUST use CPT 99281 - 99285. DO NOT use 9920x / 9921x(Office).
-        - ** Internal Medicine / PC **: Use 9920x / 9921x.
+        ** YOUR SPECIFIC DIRECTIVE (V2.2 VIBES) **:
+        ${specificLogic}
 
-        ** TARGET ERROR **: "${errorType}"
+        ** STYLE & REALISM **:
+        - ** Pharmacy **: 'PO' = Rev Code 0250. 'IV/IM' = J-Code.
+        - ** Descriptions **: Use short abbreviations (e.g., "ER VISIT LEVEL 4", "CBC W/ DIFF").
+        - ** ANCILLARY REQUIREMENT **: Real bills (especially ER visits) are rarely just one line. For ER Levels 3, 4, or 5, you MUST include at least 2 ancillary charges (Labs, Imaging, or Supplies) from the references provided that support the diagnosis.
+        - ** NO META-TALK **: NEVER use words like "FAKE", "ERROR", or "VILLAIN" in the bill descriptions.
 
-        ** LOGIC **:
-    1. ** Code the Visit **: Select the appropriate E / M code(Clean or Upcoded).
-        2. ** Code the Orders **: YOU MUST create a separate line item for EVERY "Order" listed in the Clinical Truth (Labs, Radiology, Meds, Supplies).
-           - ** PHARMACY REALISM **: If the visit note says "PO", "Tylenol", or "Prescription", it is an ORAL medication. DO NOT use J-codes. Use Revenue Code 0250 and a short generic description (e.g. "PHARMACY - ORAL MED").
-           - ** INJECTIONS **: Only use J-codes if the note explicitly says "IM", "IV", or "Injection".
-           - For Lab Handling: Use CPT 99000.
-
-        ** ERROR INSTRUCTIONS (STRICT SCOPE) **:
-        - If CLEAN: Code perfectly (CPC Standard).
-        - If UPCODING: Select a CPT code exactly **1-2 levels HIGHER** than supported by the Visit Note.
-           - Example: If visit note supports Level 2, use Level 3 or 4. DO NOT jump from Level 2 straight to Level 5.
-           - ** CRITICAL **: DO NOT add or remove other line items. Only change the E/M level.
-        - If UNBUNDLING: Fragment a standard panel (e.g. CMP) into individual expensive components.
-        - If PHANTOM BILLING: Add a CPT code for a service (e.g. expensive drug or procedure) NOT in the "orders".
-        - ** NO ERROR LEAKAGE **: If ${errorType} is UPCODING, the rest of the bill MUST be perfect. Do not mix error types.
-        
-        ** STYLE **:
-        - ** Descriptions **: Use SHORT, hospital-standard abbreviations. DO NOT use the full CPT book definition or long sentences.
-        - ** NO META-TALK **: NEVER include words like "UPCODING", "ERROR", "INTENT", "ASSUMED", or "PHANTOM" in the line item descriptions. These must look 100% like real clinical descriptions (e.g. "LIDOCAINE INJECTION" not "LIDOCAINE (FOR PHANTOM BILLING)").
-        - ** Examples **: "ER VISIT LEVEL 5", "CBC W/ DIFF", "CT ABDOMEN/PELVIS W/ CONTRAST".
-        
-        ** CPT / HCPCS REFERENCE LIBRARY(STRICT) **:
-        - ** ER Visit **: 99281(L1), 99282(L2), 99283(L3), 99284(L4), 99285(L5).
-        - ** Injections **: 96374(Initial IV Push), 96375(Each addtl IV push), 96365(Initial Infusion), 96372(IM / SQ).
-        - ** Labs **: 85025(CBC), 80053(CMP), 81001(Urinalysis), 84443(TSH), 84450(Troponin).
-        - ** Imaging **: 71045(CXR 1v), 71046(CXR 2v), 74177(CT Abd / Pel w / Contrast), 74150(CT Abd w / o), 93000(ECG w / interpret).
-        - ** Procedures **: 12011(Simple Repair <2.5cm), 12001(Simple Repair <2.5cm), 10140(I&D Hematoma).
-        - ** Vaccines **: 90715(Tdap), 90630(Flu), 90714(Td).
-        - ** Medications (J-Codes) **: J1100 (Dexamethasone), J3490 (Unclassified Drugs), J0696 (Ceftriaxone), J1644 (Heparin), J2270 (Morphine), J2405 (Ondansetron), J1040 (Methylprednisolone), J2060 (Lorazepam), J7030 (Normal Saline).
-        - ** STRICT **: NEVER use pseudo-codes like "SUPPLY-XX".
-        - ** NO CODE REUSE **: NEVER use the same CPT/J-code for two different drug descriptions on the same bill. If you have multiple medications and don't know the specific codes, use DIFFERENT unclassified codes (e.g., J3490, J9999) or unique identifiers to ensure they are distinct line items.
-        - ** DO NOT ** use generic codes like A0470 for drugs if a J-code is applicable.
-        - ** DO NOT ** use codes like 99185 or 99291 unless clinical truth supports "Critical Care".
-        
-        ** CRITICAL **: You must output a "Justification String" explaining WHY you chose the code.
+        ** CPT REFERENCE **:
+        - ER: 99281-99285 | Office: 99202-99215
+        - Labs: 85025 (CBC), 80053 (CMP), 84443 (TSH), 84450 (Troponin)
+        - Rads: 71046 (CXR 2v), 74177 (CT Abd/Pel w/ Contrast), 93000 (ECG)
+        - Meds: J1100 (Dex), J0696 (Ceftriaxone), J2405 (Zofran), J7030 (Saline)
 
         ** RETURN JSON **:
-    {
-        "coding_truth": {
-            "cpt_codes": [{ "code": "String", "desc": "String", "qty": Number }],
+        {
+            "coding_truth": {
+                "cpt_codes": [{ "code": "String", "desc": "String", "qty": Number }],
                 "icd_codes": [{ "code": "String", "desc": "String" }],
-                    "error_metadata": {
-                "is_error": boolean,
-                    "type": "${errorType}",
-                        "justification": "I chose code X because..."
+                "error_metadata": {
+                    "justification": "Detailed explanation that supports your billing (even if gaslighted)"
+                }
             }
         }
-    }
     `;
     const result = await model.generateContent(prompt);
     return parseAndValidateJSON(result.response.text());
 }
 
-// 3. THE FINANCIAL CLERK ("The Payer Persona")
-// --- AGENT 10: THE DYNAMIC ACTUARY (Item-by-Item Realism) ---
-// BKM: AI ONLY looks up Medicare rate. Final price is calculated DETERMINISTICALLY in code.
-async function generateItemPrice(item, payerType, facility) {
+// --- HELPERS: Pricing & Coding Baselines ---
+
+// Z-Factor Mapping: State Code to Multiplier (2026 GAF Averages)
+const STATE_Z_FACTORS = {
+    'AL': 0.91, 'AK': 1.27, 'AZ': 0.99, 'AR': 0.89, 'CA': 1.14,
+    'CO': 1.03, 'CT': 1.08, 'DE': 1.02, 'FL': 0.98, 'GA': 0.96,
+    'HI': 1.11, 'ID': 0.93, 'IL': 1.02, 'IN': 0.92, 'IA': 0.90,
+    'KS': 0.91, 'KY': 0.91, 'LA': 0.93, 'ME': 0.96, 'MD': 1.08,
+    'MA': 1.12, 'MI': 0.97, 'MN': 1.02, 'MS': 0.91, 'MO': 0.93,
+    'MT': 0.92, 'NE': 0.91, 'NV': 1.01, 'NH': 1.02, 'NJ': 1.11,
+    'NM': 0.94, 'NY': 1.12, 'NC': 0.96, 'ND': 0.93, 'OH': 0.94,
+    'OK': 0.90, 'OR': 1.03, 'PA': 0.99, 'RI': 1.04, 'SC': 0.93,
+    'SD': 0.90, 'TN': 0.92, 'TX': 0.98, 'UT': 0.96, 'VT': 0.95,
+    'VA': 1.01, 'WA': 1.06, 'WV': 0.90, 'WI': 0.96, 'WY': 0.95,
+    'DC': 1.15
+};
+
+const PAYER_MULTIPLIERS = {
+    'Medicare': 1.0,
+    'Insured': 2.5,
+    'Uninsured': 4.0
+};
+
+// X-Factor: Global Flagging Threshold (50% over Pest)
+const FLAGGING_THRESHOLD = 0.50;
+
+/**
+ * Urban/Rural Buffer Logic: Check if zip/city is a Major Metro
+ */
+/**
+ * Urban/Rural Buffer Logic: Scans any text (City, Zip, or Full Address) for Major Metro markers.
+ */
+const isMajorMetro = (text) => {
+    if (!text || typeof text !== 'string') return false;
+    const metros = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Francisco', 'Miami'];
+    const zipPrefixes = ['100', '101', '102', '606', '900', '901', '902', '770', '850', '191', '782', '921', '752', '941', '331'];
+
+    const hasMetroName = metros.some(m => text.includes(m));
+    const hasMetroZip = zipPrefixes.some(z => new RegExp(`\\b${z}\\d{2,5}\\b`).test(text));
+
+    return hasMetroName || hasMetroZip;
+};
+
+
+// --- SHARED PRICING CORE (BULLETPROOF SYNCHRONIZATION) ---
+const MEDICARE_CACHE = new Map();
+
+/**
+ * The single source of truth for Medicare rates.
+ */
+async function fetchMedicareRate(code, desc) {
+    if (MEDICARE_CACHE.has(code)) return MEDICARE_CACHE.get(code);
+
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-    const isSelfPay = payerType.includes("Self");
-
-    // STEP 1: Ask AI ONLY for the Medicare rate lookup (no price calculation)
     const prompt = `
-        You are "The Medicare Rate Lookup Agent". Your ONLY job is to look up the 2024 CMS Medicare Physician Fee Schedule reimbursement rate.
+        You are "The Medicare Rate Lookup Agent".
+        Your task is to look up the current CMS Medicare Physician Fee Schedule (MPFS) National Average reimbursement rate for this specific service.
         
-        **SERVICE**: CPT/HCPCS Code "${item.code}" - "${item.desc}"
+        **SERVICE**: CPT/HCPCS Code "${code}" - "${desc}"
         
         **INSTRUCTIONS**:
-        1. Look up the 2024 CMS Medicare Physician Fee Schedule national average reimbursement rate for this specific code.
-        2. Return ONLY the Medicare rate. Do NOT calculate any markup or final price.
-        3. If this is a facility fee or supply, estimate based on typical Medicare reimbursement.
+        1. Return the current CMS Medicare national average reimbursement rate.
+        2. Return ONLY the numeric value.
         
         **RETURN JSON**:
         {
-            "medicareRate": Number  // The CMS Medicare reimbursement rate (e.g., 145.25)
+            "medicareRate": Number
         }
     `;
+
     try {
         const result = await model.generateContent(prompt);
-        const data = parseAndValidateJSON(result.response.text());
-        const medicareRate = Number(data.medicareRate);
-
-        // STEP 2: Calculate price DETERMINISTICALLY in code (no AI discretion)
-        let multiplier;
-        if (isSelfPay) {
-            // Self-Pay: 1.25x to 1.40x Medicare (gives margin under 1.5x threshold)
-            multiplier = 1.25 + (Math.random() * 0.15);
-        } else {
-            // Insured: 2x to 2.8x Medicare (insurance negotiates discounts)
-            multiplier = 2.0 + (Math.random() * 0.8);
-        }
-
-        const finalPrice = parseFloat((medicareRate * multiplier).toFixed(2));
-
-        console.log(`[Pricing] ${item.code}: PayerType="${payerType}", isSelfPay=${isSelfPay}, Medicare=$${medicareRate.toFixed(2)}, Multiplier=${multiplier.toFixed(2)}x, Final=$${finalPrice}`);
-
-        return { medicare: medicareRate, price: finalPrice };
+        const text = result.response.text();
+        const data = parseAndValidateJSON(text);
+        const rate = Number(data.medicareRate);
+        MEDICARE_CACHE.set(code, rate);
+        return rate;
     } catch (e) {
-        console.warn(`[Pricing Agent] Failed for ${item.code}, using fallback.`);
-        return null;
+        console.warn(`[Medicare Lookup] Failed for ${code}, falling back to baseline.`);
+        return getBasePrice(code);
     }
 }
 
+// 3. THE FINANCIAL CLERK ("The Payer Persona")
+async function generateItemPrice(item, payerType, facility) {
+    try {
+        const medicareRate = await fetchMedicareRate(item.code, item.desc);
+
+        // --- THE ESTIMATED PRICE ENGINE (P_est = P_med * Y * Z) ---
+        // 1. Y (Payer Multiplier)
+        let y = PAYER_MULTIPLIERS.Insured;
+        if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
+        else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
+
+        // 2. Z (Geographically Multiplier)
+        const state = facility.state || 'US';
+        let z = STATE_Z_FACTORS[state] || 1.0;
+
+        // 3. Urban Buffer (+0.10 override) - Scan both city and zip context
+        if (isMajorMetro(`${facility.city} ${facility.zip}`)) {
+            z += 0.10;
+        }
+
+        const pEst = parseFloat((medicareRate * y * z).toFixed(2));
+        console.log(`[Price Engine] ${item.code}: Med=$${medicareRate}, Y=${y}, Z=${z.toFixed(2)}, P_est=$${pEst}`);
+
+        return { medicare: medicareRate, price: pEst, y, z };
+    } catch (e) {
+        console.warn(`[Price Engine] Logic failure for ${item.code}, reverting to fallback.`);
+        const pMedFallback = getBasePrice(item.code);
+        let y = PAYER_MULTIPLIERS.Insured;
+        if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
+        else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
+
+        const pEstFallback = parseFloat((pMedFallback * y * 1.0).toFixed(2));
+        return { medicare: pMedFallback, price: pEstFallback, y, z: 1.0 };
+    }
+}
+
+// --- AGENT 12: THE FINANCIAL CLERK (V2.2 - Mathematical Sabotage) ---
 async function generateFinancialClerk(codingTruth, payerType, errorType = 'CLEAN', specialty, facility) {
-    // STRICT JS LOGIC - No AI Math
+    // 1. DETERMINISTIC MULTIPLIERS (BKM Standards)
     const isSelfPay = payerType.includes("Self");
     const isMedicare = payerType.includes("Medicare");
     const isPriceGouging = errorType === "CMS_BENCHMARK";
+    const isBalanceMismatch = errorType === "BALANCE_MISMATCH" || errorType === "MATH_ERROR";
 
-    // Multipliers (Harden Pricing Guardian Logic)
-    // For Self-Pay, we use 1.4x as the standard to avoid "Predatory" flags (>1.5x Medicare).
-    // This allows the bill to look "realistic" but correctly price-gouged ONLY if requested.
-    let baseMultiplier = isSelfPay ? 1.4 : (isMedicare ? 1.0 : 1.3);
-    if (isPriceGouging) baseMultiplier = 5.5; // Explicitly jump over the 5x line for the error scenario
+    // 2. THE PRICING SABOTAGE LOGIC
+    // Medicare=1.0, Insured=2.5, Self-Pay=4.0
+    let y = 2.5;
+    if (isMedicare) y = 1.0;
+    else if (isSelfPay) y = 4.0;
 
-    const getCategoricalMultiplier = (cptCode) => {
-        const code = String(cptCode);
-        if (isMedicare) return 1.0;
-
-        // Tier 1: High Markup (E/M Visits)
-        if (code.startsWith('992')) return baseMultiplier;
-
-        // Tier 2: Medium Markup (Radiology and Small Procedures)
-        if (code.startsWith('7') || code.startsWith('1') || code.startsWith('96') || code.startsWith('93')) {
-            return isSelfPay ? 1.5 : 1.3;
-        }
-
-        // Tier 3: Low Markup (Drugs and Labs)
-        if (code.startsWith('J') || code.startsWith('8')) {
-            return isSelfPay ? 1.3 : 1.1;
-        }
-
-        return baseMultiplier;
-    };
-
-    // Base Rates (Simplified RVU-ish)
-    const getBasePrice = (cpt) => {
-        const code = String(cpt);
-        // E/M
-        if (code.startsWith('99285')) return 380;
-        if (code.startsWith('99284')) return 230;
-        if (code.startsWith('99214')) return 130;
-        if (code.startsWith('99213')) return 95;
-
-        // Radiology
-        if (code.startsWith('741')) return 280; // CT Abdomen
-        if (code.startsWith('71046')) return 35; // CXR 2 view
-        if (code.startsWith('71045')) return 32; // CXR 1 view
-        if (code.startsWith('73610')) return 36; // Ankle X-ray
-        if (code.startsWith('7')) return 45;    // Default Rads
-
-        // Lab
-        if (code.startsWith('87')) return 20;    // Rapid Tests
-        if (code.startsWith('85025')) return 12; // CBC
-        if (code.startsWith('80053')) return 15; // CMP
-        if (code.startsWith('8100')) return 8;   // Urinalysis
-        if (code.startsWith('86592')) return 22; // Strep
-        if (code.startsWith('8')) return 15;     // Default Lab
-
-        // Procedures
-        if (code.startsWith('131')) return 180; // Complex Repair
-        if (code.startsWith('12011')) return 43; // Simple Repair
-        if (code.startsWith('9637')) return 35; // Injection Service
-        if (code.startsWith('1')) return 50;    // Default Proc
-
-        // Cardiology
-        if (code.startsWith('93000')) return 45; // ECG
-
-        // Lab Handling
-        if (code.startsWith('9900')) return 15; // Specimen Handling
-
-        // Medications / Misc
-        if (code.startsWith('J') || code.startsWith('90')) {
-            const isExpensive = code.startsWith('J9') || code.startsWith('J08') || code.startsWith('J3');
-            if (isExpensive) return 120 + (Math.random() * 200);
-            return 8 + (Math.random() * 15); // Generic Med Base ($8-$23)
-        }
-        if (code === '0250') return 15; // Generic Oral Med
-        if (code === '99000') return 9; // Handling Fee
-
-        // Default catch-all (Randomized to prevent bizarre identical rows)
-        return 45 + (Math.random() * 80);
-    };
+    // Boost to 5.5x for CMS_BENCHMARK to guarantee a Policy Violation flag (>5.0x threshold)
+    if (isPriceGouging) y = 5.5;
 
     const lineItems = await Promise.all(codingTruth.cpt_codes.map(async (item) => {
-        let price;
+        // BKM: One-by-one Price Engine lookup
+        const pricingResult = await generateItemPrice(item, payerType, facility);
 
-        // EXCEPTION: If the error is High Priced (CMS_BENCHMARK), use the deterministic gouging logic
+        // Apply the Y-multiplier override if we are in a gouging scenario
+        let unitPrice = pricingResult.price;
         if (isPriceGouging) {
-            const base = getBasePrice(item.code);
-            const categoricalMultiplier = 5.5; // Predatory Gouging
-            const jitter = 0.95 + (Math.random() * 0.10);
-            const noise = (Math.random() * 0.99);
-            price = parseFloat(((base * categoricalMultiplier * jitter) + noise).toFixed(2));
-        } else {
-            // BKM: One-by-one API call. Price is calculated DETERMINISTICALLY inside generateItemPrice().
-            const pricingResult = await generateItemPrice(item, payerType, facility);
-
-            if (pricingResult && pricingResult.price) {
-                // TRUST the price from generateItemPrice() - it already enforces 1.25x-1.40x for Self-Pay
-                price = Number(pricingResult.price);
-            } else {
-                // Fallback if API fails - use the SAME multiplier logic as generateItemPrice()
-                const base = getBasePrice(item.code);
-                const fallbackMultiplier = isSelfPay ? (1.25 + Math.random() * 0.15) : (2.0 + Math.random() * 0.8);
-                price = parseFloat((base * fallbackMultiplier).toFixed(2));
-                console.warn(`[Pricing Fallback] ${item.code}: Base=$${base}, Multiplier=${fallbackMultiplier.toFixed(2)}x, Price=$${price}`);
-            }
+            unitPrice = parseFloat((pricingResult.medicare * y * pricingResult.z).toFixed(2));
         }
 
-        const total = parseFloat((price * item.qty).toFixed(2));
-
         return {
-            date: "MM/DD/YYYY", // Placeholder
-            revCode: assignRevenueCode(item.code),
+            date: "MM/DD/YYYY", // Placeholder for Publisher
+            revCode: assignRevenueCode(item.code, facility.facilityType),
             code: item.code,
             description: item.desc,
             qty: item.qty,
-            unitPrice: price,
-            total: total
+            unitPrice: unitPrice,
+            total: parseFloat((unitPrice * item.qty).toFixed(2))
         };
     }));
 
-    const totalCharges = lineItems.reduce((sum, item) => sum + item.total, 0);
+    const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
 
-    // Adjustments
+    // 3. ADJUSTMENTS & INSURANCE (The "Process" Logic)
     let adjustments = 0;
     let adjBreakdown = [];
-
     if (!isSelfPay) {
-        // Contractual Write-off
-        const writeoffVar = 0.40;
-        adjustments = parseFloat((totalCharges * writeoffVar).toFixed(2));
+        // Standard 40% Insurance Write-off
+        adjustments = parseFloat((subtotal * 0.40).toFixed(2));
         adjBreakdown.push({ label: "Contractual Adj", amount: -adjustments });
     }
 
-    const insPaidRaw = isSelfPay ? 0 : parseFloat((totalCharges * 0.10).toFixed(2));
-    const insPaid = insPaidRaw === 0 ? 0 : -insPaidRaw; // Prevent negative zero visual glitch
-    const grandTotal = parseFloat((totalCharges - adjustments - insPaidRaw).toFixed(2));
+    const insPaidRaw = (isSelfPay || isMedicare) ? 0 : parseFloat((subtotal * 0.10).toFixed(2));
+    const insPaid = insPaidRaw === 0 ? 0 : -insPaidRaw;
+
+    // 4. THE GRAND TOTAL TRAP (The "Sabotage")
+    let grandTotal;
+    if (isBalanceMismatch) {
+        // SABOTAGE: "Forget" to subtract adjustments and insurance payments.
+        // mimicking a billing software glitch where the patient is asked for the GROSS total.
+        grandTotal = parseFloat(subtotal.toFixed(2));
+    } else {
+        // HONEST MATH
+        grandTotal = parseFloat((subtotal - adjustments - insPaidRaw).toFixed(2));
+    }
 
     return {
         lineItems,
-        subtotal: parseFloat(totalCharges.toFixed(2)),
+        subtotal: parseFloat(subtotal.toFixed(2)),
         adjustments: -adjustments,
         adjustmentsBreakdown: adjBreakdown,
         insPaid: insPaid,
@@ -1147,195 +1181,247 @@ function distributeLineItems(lineItems, admissionDate, dischargeDate) {
 }
 
 // 4. THE POLISH AGENT ("Visual Noise & QC")
+// --- AGENT 13: THE PUBLISHER (V2.2 - Forensic Documentarian) ---
 async function generatePolishAgent(clinicalTruth, codingTruth, financialData, params) {
-    const { specialty, payerType, errorType } = params;
+    const { specialty, payerType, errorType, complexity, facility } = params;
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
     const prompt = `
-        You are "The Publisher".Finalize this bill for printing.
+        You are "The Publisher". Your role is to finalize the bill and PRESERVE all forensic evidence exactly as provided.
+        DO NOT correct any perceived errors in pricing, math, or descriptions.
 
-        ** DATA **:
-        - Patient: ${JSON.stringify(clinicalTruth.patient_demographics)}
+        ** INPUT DATA **:
+        - Patient: ${JSON.stringify(clinicalTruth.patient)}
+        - Vitals: ${JSON.stringify(clinicalTruth.vitals)}
         - Financials: ${JSON.stringify(financialData)}
-        - Error Requested: ${errorType}
-        - REAL FACILITY DATA: ${JSON.stringify(params.facility)}
+        - Facility Data: ${JSON.stringify(facility)}
+        - Coding Justification: "${codingTruth.error_metadata.justification}"
 
         ** INSTRUCTIONS **:
-    1. ** Patient Info **: Use Name, Age, Gender from clinical truth.
-        2. ** Dates **:
-    - Set Admission / Discharge Date(e.g., 02 /01 / 2026).
-           - Set Statement Date(e.g., 02 /05 / 2026).
-            - ** Due Date Logic **: Use a realistic 21-30 day window from the Statement Date.
-        3. ** Identifiers **: Generate 10-digit NPI (start with 141, 167, or 189), 9-digit Tax ID (XX-XXXXXXX), 8-digit Statement ID, and 7-digit Account Number. 
-           - ** REALISM **: Use realistic NPI masks starting with '1' (Organization). Tax ID should be in the format e.g. 45-2983741 (NON-SEQUENTIAL digits).
-        4. ** Visual Noise & Branding **: 
-           - ** REAL FACILITY DATA **: YOU MUST USE THE REAL FACILITY NAME AND ADDRESS provided in the data above.
-           - ** Contact **: Use a realistic customer service number for that region.
-           - ** Disclaimers **: Provide 3-5 distinct, varied legal disclaimers about patient rights, insurance, and billing disputes.
-        5. **Identifiers**: Use a fake Tax ID and NPI, but formatted correctly for that state.
-        6. ** NO PLACEHOLDERS **: NEVER use "123 Medical Center", "800-555-1212", "ST 12345", or "(ST)".
+        1. **PERSISTENT IDENTIFIERS**: Use the EXACT NPI ("${facility.npi}") and Tax ID ("${facility.taxId}") provided by the Facility Scout.
+        2. **FORENSIC PRESERVATION**: Use the EXACT CPT descriptions provided by the Coder. If the Coder says "RIGHT" and the clinical note says "LEFT", PRINT "RIGHT".
+        3. **PROVIDER NOTES**: Generate a naturalistic "Provider Note" based on the clinical truth. **STRICT LIMITATION**: Do NOT use "audit-defense" language. Do NOT say things like "this necessitated a higher level," "justified level 4," or "due to complexity." Instead, simply describe the observations and symptoms neutrally (e.g., "Pt presents with persistent cough, vitals stable, CXR performed"). It must sound like a clinical entry, not a defense of the bill.
+        4. **MATHEMATICAL FIDELITY**: If financialData.grandTotal does not equal (Subtotal - Adjustments), PRINT THE BROKEN TOTAL. You are a printer, not a calculator.
+        5. **REGIONAL BRANDING**: Use the facility name and address from the Scout context.
+        6. **DATES**: Ensure Statement Date is logical (e.g., Feb 2026). If the visit was High Complexity (Multi-day), set a 2-3 day range.
 
         ** RETURN JSON **:
-    {
-        "bill_data": {
-            "patientName": "...",
-                "patientDOB": "MM/DD/YYYY",
-                    "admissionDate": "MM/DD/YYYY",
-                        "dischargeDate": "MM/DD/YYYY",
-                            "statementDate": "MM/DD/YYYY",
-                                "dueDate": "MM/DD/YYYY",
-                                    "statementId": "...",
-                                        "accountNumber": "...",
-                                            "npi": "...",
-                                                "taxId": "...",
-                                                    "provider": {
-                                                        "name": "Facility Name",
-                                                        "address": "Full Street Address, City, ST 12345-6789",
-                                                        "contact": "Phone Number",
-                                                        "tob": "131",
-                                                        "disclaimers": [
-                                                            "This bill is for services rendered. Please review for accuracy.",
-                                                            "APPEAL RIGHTS: You have 180 days from the statement date to dispute these charges in writing.",
-                                                            "Financial assistance is available for qualifying patients."
-                                                        ]
-                                                    }
+        {
+            "bill_data": {
+                "patientName": "String",
+                "admissionDate": "MM/DD/YYYY",
+                "dischargeDate": "MM/DD/YYYY",
+                "statementDate": "MM/DD/YYYY",
+                "dueDate": "MM/DD/YYYY",
+                "npi": "${facility.npi}",
+                "taxId": "${facility.taxId}",
+                "provider": {
+                    "name": "${facility.name}",
+                    "address": "${facility.address}, ${facility.city}, ${facility.state} ${facility.zip}",
+                    "contact": "Realistic Phone Number",
+                    "tob": "131",
+                    "providerNotes": "The justification provided by the coder"
+                }
+            }
         }
-    }
-
-
-        ** CRITICAL ARCHITECTURAL CONSTRAINT **:
-    - If Complexity is "Low" or "Medium", the Admission Date and Discharge Date MUST be the SAME.
-        - If Complexity is "High", you MUST use a multi - day range(at least 2 days difference).Example: Admit 02 /01, Discharge 02 /03.
     `;
 
     const result = await model.generateContent(prompt);
     let aiData = parseAndValidateJSON(result.response.text());
 
     // --- SANITY SANITIZER (Logic Hardening) ---
-    // Remove ALL AI-style spaces from dates and names (e.g. "01 / 01 / 1958" -> "01/01/1958")
-    const sanitize = (str) => typeof str === 'string' ? str.replace(/\s+/g, ' ').replace(/\s*\/\s*/g, '/').replace(/^\s+|\s+$/g, '').trim() : str;
     const nuclearSanitize = (str) => typeof str === 'string' ? str.replace(/\s+/g, '') : str;
 
-    aiData.bill_data.patientName = sanitize(aiData.bill_data.patientName);
-    aiData.bill_data.patientDOB = nuclearSanitize(aiData.bill_data.patientDOB);
-    aiData.bill_data.admissionDate = nuclearSanitize(aiData.bill_data.admissionDate);
-    aiData.bill_data.dischargeDate = nuclearSanitize(aiData.bill_data.dischargeDate);
-    aiData.bill_data.statementDate = nuclearSanitize(aiData.bill_data.statementDate);
-    aiData.bill_data.dueDate = nuclearSanitize(aiData.bill_data.dueDate);
+    // Preserve the exact financials from the Clerk (No recalculation)
+    aiData.bill_data.subtotal = financialData.subtotal;
+    aiData.bill_data.grandTotal = financialData.grandTotal;
+    aiData.bill_data.adjustments = financialData.adjustments;
+    aiData.bill_data.adjustmentsBreakdown = financialData.adjustmentsBreakdown;
+    aiData.bill_data.insPaid = financialData.insPaid;
 
-    // Hardened Identifier Masking (Anti-AI Fingerprinting)
-    const genIdArr = (len) => Array.from({ length: len }, () => Math.floor(Math.random() * 10)).join('');
-    aiData.bill_data.accountNumber = genIdArr(8);
-    aiData.bill_data.statementId = genIdArr(9);
-    aiData.bill_data.npi = "1" + genIdArr(9);
+    // Force Identifier Persistence
+    aiData.bill_data.npi = facility.npi;
+    aiData.bill_data.taxId = facility.taxId;
 
-    if (aiData.bill_data.taxId) {
-        aiData.bill_data.taxId = genIdArr(2) + "-" + genIdArr(7);
-    }
+    // V2.2 Fix: Branded Identifiers (e.g. BAR-12345678)
+    const prefix = facility.name.substring(0, 3).toUpperCase();
+    aiData.bill_data.accountNumber = `${prefix}-${Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('')}`;
 
-    // V2.2 Complexity Enforcement: Low/Med are single-day encounters
-    const admissionDate = aiData.bill_data.admissionDate || "02/01/2026";
-    const complexity = params.complexity || "Low";
-
-    if (complexity === "Low" || complexity === "Medium") {
-        aiData.bill_data.dischargeDate = admissionDate;
-    } else if (complexity === "High" && (aiData.bill_data.admissionDate === aiData.bill_data.dischargeDate || !aiData.bill_data.dischargeDate)) {
-        // Programmatic Force: If High and dates are same, increment discharge by 2 days
-        const d = new Date(admissionDate);
-        d.setDate(d.getDate() + 2);
-        aiData.bill_data.dischargeDate = d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-    }
-
-    // Use Helper to distribute items across the range for High Complexity
-    // For Low/Med, it will correctly stick to a single day.
+    // Distribute items (Single day for Low/Med, Range for High)
     aiData.bill_data.lineItems = distributeLineItems(
         financialData.lineItems,
         aiData.bill_data.admissionDate,
         aiData.bill_data.dischargeDate
     );
 
-    aiData.bill_data.subtotal = financialData.subtotal;
-    aiData.bill_data.grandTotal = financialData.grandTotal;
-    aiData.bill_data.adjustments = financialData.adjustments;
-    aiData.bill_data.adjustmentsBreakdown = financialData.adjustmentsBreakdown;
-    aiData.bill_data.insPaid = financialData.insPaid;
-    // Simplified ICD-10 exported format (Code only or Code + Short Desc)
-    aiData.bill_data.icd10 = codingTruth.icd_codes.map(x => `${x.code}`).join(', ');
+    // Sync Patient Truth
+    aiData.bill_data.patientName = clinicalTruth.patient.name;
+    aiData.bill_data.patientDOB = clinicalTruth.patient.dob || "01/01/1980";
 
-    // Sync patient info from truth if missing or placeholders
-    const age = clinicalTruth.patient_demographics.age || 40;
-    const birthYear = 2026 - age;
-    aiData.bill_data.patientName = sanitize(clinicalTruth.patient_demographics.name || aiData.bill_data.patientName);
-    aiData.bill_data.patientDOB = nuclearSanitize(`01/01/${birthYear}`);
-    aiData.bill_data.insurance = payerType;
+    // V2.2 Fix: Include Attending Physician context
+    aiData.bill_data.attendingPhysician = clinicalTruth.attending_physician?.name || "Dr. Staff Physician, MD";
+    aiData.bill_data.attendingNpi = clinicalTruth.attending_physician?.npi || "1098765432";
 
-    // Simplified administrative footer
-    if (!aiData.bill_data.footerNote) {
-        aiData.bill_data.footerNote = "Account services provided by regional central billing office.";
+    // V2.2 Fix: Include narrative descriptions for ICD-10 codes
+    aiData.bill_data.icd10 = codingTruth.icd_codes.map(x => `${x.code} (${x.desc})`).join(', ');
+
+    // --- V2.2 LABEL VARIANCE ENGINE (Simulation Hardening) ---
+    const LABEL_MATRIX = {
+        npi: { primary: "NPI", alternates: ["Provider ID", "Facility NPI", "National Provider Identifier"] },
+        taxId: { primary: "Tax ID", alternates: ["EIN", "Federal Tax ID", "Tax ID:"] },
+        address: { primary: "Address", alternates: ["Facility Address", "Service Location", "Place of Service"] },
+        contact: { primary: "Customer Service", alternates: ["Billing Inquiries", "Patient Financial Services", "Contact Us", "Customer Care"] },
+        account: { primary: "Account", alternates: ["Account Number", "Patient ID", "MRN", "Guarantor Account"] },
+        tob: { primary: "TOB", alternates: ["Bill Type", "Type of Bill"] },
+        patient: { primary: "PATIENT", alternates: ["Patient Name", "Recipient"] },
+        dob: { primary: "DOB", alternates: ["Date of Birth", "Birth Date"] },
+        dos: { primary: "DATE OF SERVICE", alternates: ["Service Date", "DOS", "Admit Date", "From/Through Dates"] },
+        attending: { primary: "Attending", alternates: ["Rendering Provider", "Ordering Physician", "Treating Provider", "Attending MD"] },
+        diagnosis: { primary: "DIAGNOSIS (ICD-10)", alternates: ["Diagnosis Description", "Primary Diagnosis", "ICD Code"] },
+        insurance: { primary: "INSURANCE", alternates: ["Primary Payer", "Coverage", "Carrier"] },
+        statementDate: { primary: "Statement Date", alternates: ["Bill Date", "Document Date", "Post Date"] },
+        statementId: { primary: "Statement ID", alternates: ["Invoice Number", "Document ID", "Reference Number"] },
+        dueDate: { primary: "Due Date", alternates: ["Pay By", "Please Pay By", "Remit By"] },
+        gridDate: { primary: "Date", alternates: ["Service Date", "Transaction Date"] },
+        revCode: { primary: "Rev Code", alternates: ["Revenue Code", "Department Code", "Rev CD"] },
+        gridCode: { primary: "Code / Mod", alternates: ["CPT/HCPCS", "Procedure Code", "Service Code", "Svc Code/Modifier"] },
+        gridDesc: { primary: "Description", alternates: ["Service Description", "Item Name", "Charge Description"] },
+        qty: { primary: "Qty", alternates: ["Units", "Quantity"] },
+        price: { primary: "Price", alternates: ["Unit Price", "Standard Charge"] },
+        total: { primary: "Total", alternates: ["Extended Price", "Amount", "Billed Amount"] },
+        totalCharges: { primary: "Total Charges", alternates: ["Gross Charges", "Total Billed", "Total Fees"] },
+        adjustments: { primary: "Total Adjustments", alternates: ["Contractual Write-off", "Provider Discount", "Adjustments/Credits", "Contractual Allowance"] },
+        balance: { primary: "PATIENT BALANCE", alternates: ["Amount Due", "Patient Responsibility", "Please Pay This Amount", "Outstanding Balance"] },
+        coupon: { primary: "Please detach and return with payment", alternates: ["Remittance Advice", "Payment Coupon", "Payment Stub"] },
+        amountEnclosed: { primary: "Amount Enclosed", alternates: ["Payment Amount", "Total Remitted"] },
+        assistance: { primary: "FINANCIAL ASSISTANCE", alternates: ["Charity Care", "Financial Hardship", "Patient Assistance Program"] },
+        gfe: { primary: "GOOD FAITH ESTIMATE", alternates: ["GFE Disclosure", "No Surprises Act Notice"] }
+    };
+
+    const selectLabel = (key) => {
+        const item = LABEL_MATRIX[key];
+        if (!item) return key.toUpperCase();
+        // 50% Primary, 50% Alternates distributed equally
+        if (Math.random() < 0.5) return item.primary;
+        return item.alternates[Math.floor(Math.random() * item.alternates.length)];
+    };
+
+    // Map randomized labels to bill_data
+    aiData.bill_data.labels = {};
+    Object.keys(LABEL_MATRIX).forEach(key => {
+        aiData.bill_data.labels[key] = selectLabel(key);
+    });
+
+    if (payerType === 'Self-Pay') {
+        const selfPayVariants = [
+            "Self-Pay (Uninsured)",
+            "Self-Pay / None",
+            "Uninsured / Self-Pay Patient"
+        ];
+        aiData.bill_data.insurance = selfPayVariants[Math.floor(Math.random() * selfPayVariants.length)];
+        aiData.bill_data.insuranceStatus = "";
+    } else {
+        aiData.bill_data.insurance = payerType;
+        aiData.bill_data.insuranceStatus = "Active / Pending";
     }
 
-    // Create Telemetry for Agent 4
-    aiData.polish_truth = {
-        agent: "The Publisher",
-        decisions: {
-            admissionDate: aiData.bill_data.admissionDate,
-            dischargeDate: aiData.bill_data.dischargeDate,
-            complexityEnforced: complexity,
-            npiGenerated: aiData.bill_data.npi,
-            taxIdGenerated: aiData.bill_data.taxId
-        }
-    };
+    // Overwrite the specific insurance label logic with the matrix selection 
+    // unless it's Self-Pay handled above (we use insuranceLabel from matrix if needed)
+    aiData.bill_data.payerLabel = aiData.bill_data.labels.insurance;
+
+    // V2.2 Fix: Mandatory Legal Protections (No Surprises Act)
+    if (payerType === 'Self-Pay') {
+        const gfeTitle = aiData.bill_data.labels.gfe;
+        aiData.bill_data.disclaimers = [
+            `${gfeTitle}: You are receiving this bill because you are self-pay or uninsured. Under the No Surprises Act, you have the right to receive a Good Faith Estimate for the total expected cost of any non-emergency items or services.`,
+            "RIGHT TO DISPUTE: If you are billed for more than $400 above your Good Faith Estimate, you have the right to dispute the bill via the patient-provider dispute resolution process.",
+            "For more information, visit www.cms.gov/nosurprises or call 1-800-985-3059."
+        ];
+    }
 
     return aiData;
 }
 
 // --- AGENT 8: THE PRICING ACTUARY (Compliance & Benchmark Anchor) ---
-// BKM: Dynamically fetch benchmarks from AI - no hardcoded tables.
-async function getPricingBenchmarks(lineItems) {
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-
-    const codes = lineItems.map(i => `${i.code}: ${i.description}`).join('\n');
-
-    const prompt = `
-        You are "The Pricing Actuary". For each medical code below, provide the 2024 CMS Medicare reimbursement rate.
-        
-        **CODES**:
-        ${codes}
-        
-        **RETURN JSON**:
-        {
-            "benchmarks": [
-                { "code": "String", "medicareRate": Number }
-            ]
-        }
-    `;
-
+async function getPricingBenchmarks(lineItems, payerType, providerInfo) {
     try {
-        const result = await model.generateContent(prompt);
-        const data = parseAndValidateJSON(result.response.text());
-        const benchmarkMap = {};
-        data.benchmarks.forEach(b => { benchmarkMap[b.code] = b.medicareRate; });
+        // ONE-BY-ONE SYNCHRONIZATION: Call the exact same shared function as the generator
+        return await Promise.all(lineItems.map(async (item) => {
+            const pMed = await fetchMedicareRate(item.code, item.description);
 
-        return lineItems.map(item => ({
-            code: item.code,
-            description: item.description,
-            billed_price: item.unitPrice,
-            medicare_rate: benchmarkMap[item.code] || (item.unitPrice / 3),
-            chargemaster_range: "Dynamic (AI-sourced)"
+            // 1. Y Scalar
+            let y = PAYER_MULTIPLIERS.Insured;
+            if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
+            else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
+
+            // 2. Z Scalar (Identify state from provider address)
+            const address = providerInfo.address || "";
+            const stateMatch = address.match(/\b([A-Z]{2})\b\s+\d{5}/);
+            const state = stateMatch ? stateMatch[1] : 'US';
+            let z = STATE_Z_FACTORS[state] || 1.0;
+
+            // 3. Urban Buffer - Scan full address context
+            if (isMajorMetro(address)) {
+                z += 0.10;
+            }
+
+            const pEst = parseFloat((pMed * y * z).toFixed(2));
+
+            return {
+                code: item.code,
+                description: item.description,
+                billed_price: item.unitPrice,
+                medicare_rate: pMed,
+                estimated_fair_price: pEst,
+                flagging_threshold: parseFloat((pEst * (1 + FLAGGING_THRESHOLD)).toFixed(2)),
+                status: item.unitPrice > (pEst * (1 + FLAGGING_THRESHOLD)) ? "EXCESSIVE" : "FAIR"
+            };
         }));
     } catch (e) {
-        console.warn('[Actuary] Failed to fetch benchmarks, using fallback.');
-        return lineItems.map(item => ({
-            code: item.code,
-            description: item.description,
-            billed_price: item.unitPrice,
-            medicare_rate: item.unitPrice / 3,
-            chargemaster_range: "Fallback"
-        }));
+        console.warn('[Actuary] Failed to fetch benchmarks, using baseline fallback.');
+        return lineItems.map(item => {
+            const pMed = getBasePrice(item.code);
+            return {
+                code: item.code,
+                description: item.description,
+                billed_price: item.unitPrice,
+                medicare_rate: pMed,
+                estimated_fair_price: pMed * 2.5, // Simple fallack
+                status: "VERIFICATION_FAILED"
+            };
+        });
     }
 }
 
 // --- AGENT 9: THE FACILITY SCOUT (Real-World Identity) ---
+// --- DETERMINISTIC HELPERS: NPI & TAX ID (BKM: Luhn Compliance) ---
+function generateLuhnPaddedNPI() {
+    // Standard NPI: 10 digits starting with 1 or 2.
+    // Luhn formula is used for the check digit (10th digit).
+    let npiBase = "1" + Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
+
+    // Luhn calculation for 80840 + npiBase
+    const fullString = "80840" + npiBase; // 80840 is the prefix for US health identifiers
+    let sum = 0;
+    for (let i = 0; i < fullString.length; i++) {
+        let digit = parseInt(fullString.charAt(fullString.length - 1 - i));
+        if (i % 2 === 0) {
+            digit *= 2;
+            if (digit > 9) digit -= 9;
+        }
+        sum += digit;
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    return npiBase + checkDigit;
+}
+
+function generateRandomEIN() {
+    // Format: XX-XXXXXXX
+    const prefix = Math.floor(Math.random() * 90) + 10;
+    const suffix = Array.from({ length: 7 }, () => Math.floor(Math.random() * 10)).join('');
+    return `${prefix}-${suffix}`;
+}
+
 async function generateFacilityIdentity(specialty, randomSeed) {
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
     const prompt = `
@@ -1345,11 +1431,12 @@ async function generateFacilityIdentity(specialty, randomSeed) {
         **SPECIALTY**: "${specialty}"
         
         **INSTRUCTIONS**:
-        1. Select a random US state (e.g. TX, CA, NY, FL, OH) and then pick a REAL medical facility within that state.
+        1. Select a random US state and then pick a REAL medical facility within that state.
         2. Provide the EXACT real-world name and physical address.
         3. Do NOT provide fake names or placeholders (like "Metropolis General").
         4. If the specialty is "Emergency Medicine", select a real hospital with an ER.
         5. If the specialty is "Cardiology", select a real heart center or hospital.
+        6. **FACILITY TYPE**: Determine if this is a "Corporate Hospital", an "ASC", or a "Local Private Practice".
         
         **RETURN JSON**:
         {
@@ -1357,11 +1444,19 @@ async function generateFacilityIdentity(specialty, randomSeed) {
             "address": "Real Street Address",
             "city": "Real City",
             "state": "Real ST",
-            "zip": "XXXXX-XXXX"
+            "zip": "XXXXX",
+            "facilityType": "Corporate Hospital / Private Practice / ASC",
+            "regional_index": "urban / rural"
         }
     `;
     const result = await model.generateContent(prompt);
-    return parseAndValidateJSON(result.response.text().replace(/[^\x00-\x7F]/g, ""));
+    const aiData = parseAndValidateJSON(result.response.text());
+
+    // HARDENED IDENTIFIERS (JS Deterministic)
+    aiData.npi = generateLuhnPaddedNPI();
+    aiData.taxId = generateRandomEIN();
+
+    return aiData;
 }
 
 
@@ -1369,11 +1464,11 @@ async function generateFacilityIdentity(specialty, randomSeed) {
 function performPricingAudit(financialData, errorType) {
     const isPriceGouging = errorType === "CMS_BENCHMARK";
     return {
-        status: isPriceGouging ? "Excessive Pricing (Requested)" : "FMV Validated",
+        status: isPriceGouging ? "Excessive Pricing (Crosses Flagging Threshold)" : "FMV Validated",
         is_fair_market_value: !isPriceGouging,
         audit_note: isPriceGouging
-            ? "Price gouging active for CMS_BENCHMARK scenario."
-            : "Standard FMV multipliers applied."
+            ? `Price explicitly boosted beyond the ${FLAGGING_THRESHOLD * 100}% threshold.`
+            : "Dynamic pricing is within the Estimated Price Engine parameters."
     };
 }
 
@@ -1388,7 +1483,7 @@ app.post('/generate-data-v2', async (req, res) => {
         console.log(`[0/5] Facility Scout: Selected ${facility.name} (${facility.city}, ${facility.state})`);
 
         // 1. Architect
-        const clinical = await generateClinicalArchitect({ specialty, errorType, complexity });
+        const clinical = await generateClinicalArchitect({ specialty, errorType, complexity, randomSeed }, facility);
         console.log('[1/4] Architect: Created Clinical Truth.');
 
         // 2. Coder
@@ -1413,20 +1508,19 @@ app.post('/generate-data-v2', async (req, res) => {
         const eExp = ABB_MAP[errorType] || errorType.substring(0, 3).toUpperCase();
         const cExp = ABB_MAP[complexity] || complexity.substring(0, 1).toUpperCase();
 
-        const billName = `FMBI - ${sExp} -${pExp} -${eExp} -${cExp} `;
+        const billName = `FMBI-${sExp}-${pExp}-${eExp}-${cExp}`;
 
+        // V2.2 PURGE: Remove all 'Truth' metadata from the client response.
         const masterObject = {
             billName: billName.toUpperCase(),
             namingParts: { sExp, pExp, eExp, cExp },
             bill_data: finalOutput.bill_data,
-            ground_truth: coding.coding_truth.error_metadata, // Compatible with frontend
+            clinical_narrative: clinical.clinical_truth, // Needed for the 'Medical Record' button
             simulation_debug: {
-                scenario_settings: { specialty, errorType, payerType },
                 clinical_truth: clinical.clinical_truth,
                 coding_truth: coding.coding_truth,
                 financial_truth: financial,
-                pricing_audit: pricingAudit,
-                polish_truth: finalOutput.polish_truth
+                pricing_audit: pricingAudit
             }
         };
 
@@ -1509,6 +1603,19 @@ app.post('/deep-dive-analysis', async (req, res) => {
         const { bill_data, specialty, errorType, complexity, payerType, gfe_data, mr_data } = req.body;
         console.log(`[Flow] Performing Deep Dive Analysis for: ${specialty}`);
         const result = await deepDiveAnalysis(bill_data, { specialty, errorType, complexity, payerType }, gfe_data, mr_data);
+
+        // --- THE BULLETPROOF JAVASCRIPT FILTER ---
+        // Force-delete any AI hallucinations that are not actual failures
+        if (result.other_issues) {
+            result.other_issues = result.other_issues.filter(issue => {
+                const text = String(issue.explanation).toLowerCase();
+                const isPassInText = text.includes("passes") || text.includes("not greater than") || text.includes("less than") || text.includes("no failures");
+                const isLowSeverity = issue.severity === "Low";
+                // Reject if it's "Low" or the text admits it passed
+                return !isPassInText && !isLowSeverity;
+            });
+        }
+
         res.json(result);
     } catch (error) {
         console.error('[Deep Dive Error]', error);
@@ -1522,6 +1629,16 @@ app.post('/supplemental-audit', async (req, res) => {
         const { bill_data, existing_issues } = req.body;
         console.log(`[Flow] Performing Supplemental Compliance Audit...`);
         const result = await supplementalAudit(bill_data, existing_issues);
+
+        // --- SUPPLEMENTAL FILTER ---
+        if (result.supplemental_findings) {
+            result.supplemental_findings = result.supplemental_findings.filter(f => {
+                const text = f.issue.toLowerCase();
+                const isSystemTruth = text.includes("tob 131") || text.includes("npi") || text.includes("tax id") || text.includes("ein");
+                return !isSystemTruth;
+            });
+        }
+
         res.json(result);
     } catch (error) {
         console.error('[Supplemental Error]', error);
