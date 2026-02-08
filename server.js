@@ -1232,7 +1232,7 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
         - Coding Justification: "${codingTruth.error_metadata.justification}"
 
         ** INSTRUCTIONS **:
-        1. **PERSISTENT IDENTIFIERS**: Use the EXACT NPI ("${facility.npi}") and Tax ID ("${facility.taxId}") provided by the Facility Scout.
+        1. **PERSISTENT IDENTIFIERS**: Use the EXACT Patient Name ("${clinicalTruth.patient.name}"), NPI ("${facility.npi}"), and Tax ID ("${facility.taxId}") provided. DO NOT introduce typos or alternate spellings.
         2. **FORENSIC PRESERVATION**: Use the EXACT CPT descriptions provided by the Coder. If the Coder says "RIGHT" and the clinical note says "LEFT", PRINT "RIGHT".
         3. **PROVIDER NOTES**: Generate a naturalistic "Provider Note" based on the clinical truth. **STRICT LIMITATION**: Do NOT use "audit-defense" language. Do NOT say things like "this necessitated a higher level," "justified level 4," or "due to complexity." Instead, simply describe the observations and symptoms neutrally (e.g., "Pt presents with persistent cough, vitals stable, CXR performed"). It must sound like a clinical entry, not a defense of the bill.
         4. **MATHEMATICAL FIDELITY**: If financialData.grandTotal does not equal (Subtotal - Adjustments), PRINT THE BROKEN TOTAL. You are a printer, not a calculator.

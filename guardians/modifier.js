@@ -8,22 +8,21 @@ export async function auditModifiers(billData, mrData, model) {
         2. MEDICAL RECORD: ${JSON.stringify(mrData)}
 
         **INSTRUCTIONS**:
-        1. **The -25 Rule (Non-Negotiable)**: If the bill contains an E/M visit (992xx) AND any other procedure (Injection 96372, Surgery 1xxxx, Radiology 7xxxx, or Lab 8xxxx), the E/M code MUST have a -25 modifier. If it is missing, you MUST FAIL.
-        2. **The Laterality Rule (-RT/-LT)**: If the Medical Record specifies a side (Left, Right) and is an MSK, Radiology, or Procedure code, it MUST have -RT or -LT. 
-        3. **The -50 Rule (Bilateral)**: If the note says "bilateral" but only one code without -50 is billed, FAIL.
-        4. **Conflict Check**: Do not allow -25 on line items that are NOT Evaluation and Management (E/M) codes.
+        1. **The -25 Rule (Non-Negotiable)**: Look for E/M codes (992xx). Note that modifiers are appended with a hyphen (e.g., 99214-25). Split the code string to verify. If an E/M code has other procedures (Injection, Radiology) but LACKS the "-25" suffix, you MUST FAIL.
+        2. **The Laterality Rule (-RT/-LT)**: If the Record specifies a side (Left, Right), codes for limbs/joint procedures MUST have the corresponding "-RT" or "-LT" suffix.
+        3. **Truth Verification**: DO NOT hallucinate. If a code HAS the modifier (e.g. 99213-25), you ARE STRICTLY FORBIDDEN from flagging it as missing.
         
         **RETURN JSON**:
         {
             "guardian": "Modifier",
             "passed": false,
             "status": "FAIL",
-            "evidence": "Describe the specific missing or conflicting modifier (e.g. 'Code 99213 is missing the required -25 modifier despite an injection being performed').",
+            "evidence": "Describe exactly which code is missing the modifier (e.g. '99213 is missing -25').",
             "failure_details": {
-                "type": "Modifier Error / Missing Modifier",
-                "explanation": "State the specific billing rule (e.g. 'A separate E/M service requires a -25 modifier when performed with a procedure').",
+                "type": "Modifier Error",
+                "explanation": "A separate E/M service requires a -25 modifier when performed with a procedure.",
                 "severity": "Medium",
-                "overcharge_potential": "$0 (Administrative Error)"
+                "overcharge_potential": "$0"
             }
         }
         (NOTE: If everything is correct, set passed: true, status: "PASS", evidence: "Modifiers compliant", and failure_details: null).

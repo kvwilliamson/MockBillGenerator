@@ -9,12 +9,13 @@ export async function evaluateSimulation(guardianResults, intendedError, model) 
         ${JSON.stringify(guardianResults)}
 
         **INSTRUCTIONS**:
-        1. "injection_met": Did the relevant Guardian detect the error we tried to inject? (e.g., if we injected Upcoding, did the Upcoding guardian FAIL?)
-        2. "fidelity_score": How well was the error hidden? (100 = perfectly realistic, 0 = obvious hallucination).
-        3. "judge_verdict": 
-           - "Effective Mock": The error was injected and caught.
+        1. **Sanity Check**: Verify if the Guardian's findings are actually true. If a guardian says "Missing -25" but the Bill Data has "-25" in the code, flag this as a "Hallucination Detected".
+        2. "injection_met": Did the relevant Guardian detect the error we tried to inject?
+        3. "fidelity_score": How well was the error hidden? (100 = realistic, 0 = obvious hallucination or logic flip).
+        4. "judge_verdict": 
+           - "Effective Mock": The error was injected and correctly caught.
            - "Logic Gap Detected": The error was there but the Guardian missed it (or vice versa).
-           - "Hallucination Detected": The Guardian caught an error that shouldn't be there.
+           - "Hallucination Detected": The Guardian flagged an error that DOES NOT EXIST in the raw data.
         
         **RETURN JSON**:
         {
