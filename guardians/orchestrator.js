@@ -1,6 +1,6 @@
 
 import { auditUpcoding } from './upcoding.js';
-import { auditLaterality } from './laterality.js';
+import { auditQuantity } from './quantity.js';
 import { auditGlobalPeriod } from './date.js';
 import { auditMath } from './math.js';
 import { auditPrice } from './price.js';
@@ -9,30 +9,31 @@ import { auditDuplicates } from './duplicate.js';
 import { auditGFE } from './gfe.js';
 import { auditBalanceBilling } from './balance_billing.js';
 import { auditModifiers } from './modifier.js';
+import { auditReview } from './review.js';
+import { auditMissingData } from './extraction.js';
 import { evaluateSimulation } from './judge.js';
 
 export async function runDeepDiveAudit(billData, mrData, actuaryData, gfeData, params, model, parseJson) {
     const { payerType, errorType } = params;
 
-    console.log(`[Audit] Starting Parallel Multi-Guardian Audit (9 Modules)...`);
+    console.log(`[Audit] Starting Parallel Multi-Guardian Audit (10 Modules)...`);
 
     // 1. Parallel Execution of Blind Guardians
     const results = await Promise.all([
-        // auditUpcoding(billData, mrData, model).then(parseJson),
-        Promise.resolve({ guardian: "Upcoding", passed: true, status: "PASS", evidence: "Bypassed", failure_details: null }),
-        auditLaterality(billData, mrData, model).then(parseJson),
+        auditUpcoding(billData, mrData, model).then(parseJson),
+        auditQuantity(billData, mrData, model).then(parseJson),
         auditGlobalPeriod(billData, mrData, model).then(parseJson),
         auditMath(billData, model).then(parseJson),
-        // auditPrice(billData, actuaryData, model).then(parseJson),
-        Promise.resolve({ guardian: "Price Sentry", passed: true, status: "PASS", evidence: "Bypassed", failure_details: null }),
-        // auditUnbundling(billData, model).then(parseJson),
-        Promise.resolve({ guardian: "Unbundling", passed: true, status: "PASS", evidence: "Bypassed", failure_details: null }),
+        auditPrice(billData, actuaryData, model).then(parseJson),
+        auditUnbundling(billData, model).then(parseJson),
         auditDuplicates(billData, model).then(parseJson),
         (gfeData && gfeData.totalEstimatedCost)
             ? auditGFE(billData, gfeData, payerType, model).then(parseJson)
             : Promise.resolve({ guardian: "GFE", passed: true, status: "PASS", evidence: "No GFE provided for audit.", failure_details: null }),
-        auditBalanceBilling(billData, payerType, model).then(parseJson),
-        auditModifiers(billData, mrData, model).then(parseJson)
+        auditReview(billData, mrData, model).then(parseJson),
+        auditMissingData(billData, model).then(parseJson)
+        // auditBalanceBilling(billData, payerType, model).then(parseJson),
+        // auditModifiers(billData, mrData, model).then(parseJson)
     ]);
 
     console.log(`[Audit] Blind Audit Complete. Invoking Simulation Judge...`);

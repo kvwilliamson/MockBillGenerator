@@ -1,38 +1,60 @@
 
 export async function auditUpcoding(billData, mrData, model) {
+    const items = billData.lineItems || [];
+    const findings = [];
+
+    // 1. Resource Volume Check (BKM)
+    const emLevel5 = items.find(i => i.code === '99285' || i.code === '99215' || i.code === '99205');
+    if (emLevel5) {
+        const diagnostics = items.filter(i => i.revCode === '0300' || i.revCode === '0320' || i.revCode === '0400');
+        if (diagnostics.length <= 1) {
+            findings.push({
+                type: 'RESOURCE_VOLUME_MISMATCH',
+                level: emLevel5.code,
+                diagnosticCount: diagnostics.length,
+                explanation: "Level 5 charged but diagnostic volume (Labs/Imaging) is <= 1."
+            });
+        }
+    }
+
+    // 2. Systemic Skulking Check
+    const emVisits = items.filter(i => i.code.startsWith('992'));
+    const level5Visits = emVisits.filter(i => i.code.endsWith('5'));
+    if (emVisits.length >= 3 && level5Visits.length === emVisits.length) {
+        findings.push({
+            type: 'SYSTEMIC_SKULKING',
+            explanation: "100% of visits on the bill are Level 5 (Statistically improbable clumping)."
+        });
+    }
+
     const prompt = `
-        You are the "Upcoding Guardian". Your task is to perform a Zero-Trust audit of medical billing levels.
-        Ignore any intended scenario and act as if you are a professional auditor.
+        You are the "Upcoding Guardian". Deterministic checks have identified high-level billing with potential mismatches.
         
         **INPUTS**:
         1. BILL DATA: ${JSON.stringify(billData)}
         2. MEDICAL RECORD (The Truth): ${JSON.stringify(mrData)}
+        3. DETERMINISTIC FINDINGS: ${JSON.stringify(findings)}
 
         **INSTRUCTIONS**:
-        1. **Clinical Anchor Points (CPT Standards)**:
-           - **Level 5 (99285/99215)**: Requires HIGH complexity. Justified by life-threatening conditions, hypoxia (SpO2 < 90%), unstable vitals, extreme pain (8-10/10), or management of 3+ chronic issues.
-           - **Level 4 (99284/99214)**: Requires MODERATE complexity. Justified by acute illness with systemic symptoms or new major injuries.
-           - **Level 3 (99283/99213)**: Requires LOW complexity. Standard minor injury/acute illness (sore throat, simple rash).
-        2. **Audit Check**: Evaluate the Medical Record against these anchors.
-        3. **ACUITY SKEPTICISM**: Only flag if the billed level is CLEARLY above the clinical story. If a patient has 9/10 chest pain and SpO2 89%, a Level 5 is 100% CORRECT. Do NOT flag it.
-        
-        **FINAL SANITY CHECK**: If the clinical evidence (narrative complexity + resource use + vitals) supports the complexity, set passed: true.
+        1. **Severity Mismatch**: Compare the medical record narrative/vitals to the E/M level. 
+           - **LEVEL 1-2 (99281, 99282)**: These are low-acuity codes. Stable vitals and minor complaints (cough, simple rash) are APPROPRIATE for these levels. Do NOT flag as upcoding.
+           - **LEVEL 5 (99285)**: Requires high complexity (hypoxia SpO2 < 90%, unstable vitals, or life-threatening conditions).
+        2. **Modifier -25 Abuse**: If a visit and procedure are on the same day, check if the record supports a distinct EVALUATION.
+        3. **FINAL VERDICT**: If the billed level (especially Level 2-3) is clinically reasonable for the documented complaint, you MUST return passed: true.
         
         **RETURN JSON**:
         {
             "guardian": "Upcoding",
-            "passed": false, 
-            "status": "FAIL",
-            "evidence": "Forensic Proof (MANDATORY: Cite exact vitals/indicators used, e.g. 'Level 4 for BP 120/80 and normal exam')",
+            "passed": boolean, 
+            "status": "PASS | FAIL",
+            "evidence": "Forensic Proof citing record vs billing codes.",
             "failure_details": {
-                "type": "Upcoding / Over-leveling",
-                "explanation": "Provide a 2-3 sentence clinical explanation of WHY the billed level exceeds the documented complexity.",
+                "type": "Upcoding / Level-of-Service Inflation",
+                "explanation": "Provide a clinical explanation of WHY the level exceeds documentation.",
                 "severity": "High",
                 "overcharge_potential": "$Estimed dollar amount"
             }
-        }
-        (NOTE: If the bill is correct, set passed: true, status: "PASS", evidence: "Record matches level", and failure_details: null).
-    `;
+        }`;
 
     const result = await model.generateContent(prompt);
     return result.response.text();

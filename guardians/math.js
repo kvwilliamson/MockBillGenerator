@@ -1,51 +1,74 @@
 
 export async function auditMath(billData, model) {
-    // 1. Deterministic JS Calculation (BKM: Don't let AI do addition)
-    const lineTotalSum = (billData.lineItems || []).reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+    const items = billData.lineItems || [];
+    const findings = [];
+
+    // 1. Line Math Check ($0.05 Tolerance)
+    items.forEach((item, idx) => {
+        const calculatedTotal = parseFloat((item.qty * item.unitPrice).toFixed(2));
+        const reportedTotal = parseFloat((item.total || 0).toFixed(2));
+        if (Math.abs(calculatedTotal - reportedTotal) > 0.05) {
+            findings.push({ type: 'LINE_MATH_ERROR', line: idx, expected: calculatedTotal, actual: reportedTotal });
+        }
+
+        // 2. Missing Price Check
+        if (reportedTotal > 0 && (item.unitPrice === 0 || !item.unitPrice)) {
+            findings.push({ type: 'MISSING_UNIT_PRICE', line: idx, total: reportedTotal });
+        }
+    });
+
+    // 3. Global Balance Check ($1.00 Tolerance)
+    const lineTotalSum = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
     const adjustments = parseFloat(billData.adjustments || 0);
     const insPaid = parseFloat(billData.insPaid || 0);
     const calculatedGrandTotal = parseFloat((lineTotalSum + adjustments + insPaid).toFixed(2));
     const reportedGrandTotal = parseFloat((billData.grandTotal || 0).toFixed(2));
 
-    const discrepancy = Math.abs(calculatedGrandTotal - reportedGrandTotal);
+    const globalDiscrepancy = Math.abs(calculatedGrandTotal - reportedGrandTotal);
+    if (globalDiscrepancy > 1.00) {
+        findings.push({
+            type: 'GLOBAL_BALANCE_ERROR',
+            expected: calculatedGrandTotal,
+            actual: reportedGrandTotal,
+            discrepancy: globalDiscrepancy
+        });
+    }
 
-    // 2. Immediate Pass if math is perfect
-    if (discrepancy < 0.01) {
+    if (findings.length === 0) {
         return JSON.stringify({
             guardian: "Math",
             passed: true,
             status: "PASS",
-            evidence: "Totals match perfectly.",
+            evidence: "All line items and global balances are within arithmetic tolerances.",
             failure_details: null
         });
     }
 
-    // 3. AI for Explanation ONLY (Forensic Narrative)
     const prompt = `
-        You are the "Math Guardian". A mathematical mismatch has been detected in a medical bill.
+        You are the "Math Guardian". Deterministic checks have identified arithmetic mismatches.
         
-        **FOUND DISCREPANCY**:
-        - Sum of Line Items: $${lineTotalSum.toFixed(2)}
-        - Adjustments reported: $${adjustments.toFixed(2)}
-        - Insurance Paid reported: $${insPaid.toFixed(2)}
-        - Reported Grand Total: $${reportedGrandTotal.toFixed(2)}
-        - MATHEMATICAL ERROR: $${discrepancy.toFixed(2)}
+        **FINDINGS**: ${JSON.stringify(findings)}
+        **CONTEXT**:
+        - Subtotal: $${lineTotalSum.toFixed(2)}
+        - Adjustments: $${adjustments.toFixed(2)}
+        - Insurance Paid: $${insPaid.toFixed(2)}
+        - Reported Total: $${reportedGrandTotal.toFixed(2)}
 
         **INSTRUCTIONS**:
-        1. Explain where the math fails.
-        2. Identify if the 'grandTotal' is higher (Overcharge) or lower (Undercharge) than the calculated sum.
+        1. Explain where the math fails (Line item vs Global Balance).
+        2. Identify if the 'grandTotal' is higher (Overcharge) or lower than the calculated sum.
         
         **RETURN JSON**:
         {
             "guardian": "Math",
             "passed": false,
             "status": "FAIL",
-            "evidence": "Detailed breakdown of the mismatch.",
+            "evidence": "Detailed breakdown of the arithmetic mismatch.",
             "failure_details": {
                 "type": "Calculation Error",
                 "explanation": "State exactly why the math doesn't work.",
                 "severity": "High",
-                "overcharge_potential": "$${discrepancy.toFixed(2)}"
+                "overcharge_potential": "$${globalDiscrepancy.toFixed(2)}"
             }
         }`;
 

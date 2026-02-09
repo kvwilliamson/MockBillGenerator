@@ -1,32 +1,68 @@
 
 export async function auditGFE(billData, gfeData, payerType, model) {
-    const prompt = `
-        You are the "GFE Guardian". Your job is to audit compliance with the No Surprises Act ($400 rule).
-        
-        **INPUTS**:
-        1. BILL DATA (Grand Total: ${billData.grandTotal})
-        2. GFE DATA: ${gfeData && gfeData.totalEstimatedCost ? `$${gfeData.totalEstimatedCost}` : 'MISSING / NO GFE UPLOADED'}
+    const findings = [];
+    const billItems = billData.lineItems || [];
+    const gfeItems = gfeData?.lineItems || [];
+    const billTotal = parseFloat(billData.grandTotal || 0);
+    const gfeTotal = parseFloat(gfeData?.totalEstimatedCost || 0);
 
-        **CRITICAL INSTRUCTIONS**:
-        1. **BYPASS RULE**: If GFE DATA is "MISSING / NO GFE UPLOADED", you MUST return passed: true. It is impossible to have a threshold violation without an estimate.
-        2. **CALCULATE DELTA**: If GFE exists, Final Bill (${billData.grandTotal}) MINUS GFE Estimate.
-        3. **THRESHOLD TEST**: If Delta >= 400, return passed: false. Otherwise, true.
-        4. **NO GUESSING**: Do not assume an estimate of $0 if it is missing. If it is missing, the audit is a PASS by default.
+    // 1. Line Mismatch Check ($0.01 Tolerance)
+    billItems.forEach((item, idx) => {
+        const baseCode = item.code.split('-')[0];
+        const gfeMatch = gfeItems.find(g => g.code.split('-')[0] === baseCode);
+
+        if (gfeMatch) {
+            const billedPrice = parseFloat(item.unitPrice || 0);
+            const estimatedPrice = parseFloat(gfeMatch.estimatedRate || gfeMatch.unitPrice || 0);
+            if (billedPrice > (estimatedPrice + 0.01)) {
+                findings.push({ type: 'LINE_PRICE_MISMATCH', line: idx, code: item.code, billed: billedPrice, estimated: estimatedPrice });
+            }
+        }
+    });
+
+    // 2. Federal Threshold ($400 rule)
+    if (gfeTotal > 0) {
+        const delta = billTotal - gfeTotal;
+        if (delta >= 400) {
+            findings.push({ type: 'FEDERAL_THRESHOLD_VIOLATION', billTotal, gfeTotal, delta, limit: 400 });
+        }
+    }
+
+    if (findings.length === 0 || !gfeData) {
+        return JSON.stringify({
+            guardian: "GFE",
+            passed: true,
+            status: "PASS",
+            evidence: !gfeData ? "No GFE provided, skipping audit." : "Bill is within GFE estimated ranges and federal thresholds.",
+            failure_details: null
+        });
+    }
+
+    const prompt = `
+        You are the "GFE Guardian". Deterministic checks have identified Good Faith Estimate violations.
+        
+        **FINDINGS**: ${JSON.stringify(findings)}
+        **BILL DATA**: Total $${billTotal.toFixed(2)}
+        **GFE DATA**: Total $${gfeTotal.toFixed(2)}
+
+        **INSTRUCTIONS**:
+        1. Explain the No Surprises Act (NSA) violation.
+        2. Specifically mention the $400 dispute threshold if applicable.
+        3. Identify specific line items that exceeded the estimate.
         
         **RETURN JSON**:
         {
             "guardian": "GFE",
-            "passed": true | false,
-            "status": "PASS" | "FAIL",
-            "evidence": "Detailed explanation of result",
+            "passed": false, 
+            "status": "FAIL",
+            "evidence": "GFE violation detected.",
             "failure_details": {
-                "type": "GFE Threshold Violation",
-                "explanation": "State Bill ($X) - GFE ($Y) = Delta ($Z). Cite $400 limit.",
+                "type": "GFE Threshold / Line Mismatch",
+                "explanation": "State the specific violation and total overage.",
                 "severity": "High",
-                "overcharge_potential": "$Delta"
+                "overcharge_potential": "$Estimed dollar amount"
             }
-        }
-    `;
+        }`;
 
     const result = await model.generateContent(prompt);
     return result.response.text();
