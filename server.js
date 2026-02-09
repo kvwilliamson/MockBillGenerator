@@ -13,6 +13,32 @@ import { runDeepDiveAudit } from './guardians/orchestrator.js';
 // Load local ENV
 dotenv.config();
 
+const ERROR_DESCRIPTIONS = {
+    "CLEAN": "The charges and quantities on the bill perfectly match the services the patient actually received.",
+    "DUPLICATE": "The exact same service, medication, or supply appears multiple times on the bill for the same day.",
+    "QTY_ERROR": "The bill lists an impossible volume of supplies, such as being charged for 100 pairs of gloves for one nurse visit.",
+    "UPCODING": "The patient is billed for a more complex and expensive version of a service than the one actually performed.",
+    "UNBUNDLING": "A single procedure is broken into smaller parts and billed separately to increase the total cost.",
+    "MISSING_MODIFIER": "The absence of a specific code prevents a standard discount from being applied to a secondary procedure.",
+    "MODIFIER_CONFLICT": "Incompatible codes are used together, which prevents the system from automatically discounting related procedures.",
+    "GLOBAL_PERIOD_VIOLATION": "The patient is billed for a follow-up visit that should have been included for free in the 'package price' of a previous surgery.",
+    "PHANTOM_BILLING": "The patient is charged for medications, equipment, or tests that were never ordered or administered.",
+    "RECORD_MISMATCH": "The itemized bill shows services that do not exist anywhere in the patient's actual clinical medical records.",
+    "TIME_LIMIT": "The patient is billed for more units of time than the patient actually spent in the session.",
+    "WRONG_PLACE_OF_SERVICE": "A simple office visit is billed as a 'Hospital Outpatient' service to trigger much higher facility fees.",
+    "REVENUE_CODE_MISMATCH": "An incorrect department code is used to classify a cheap item into a more expensive billing category.",
+    "NO_SURPRISES_VIOLATION": "The patient is illegally billed for the 'remainder' of a balance after insurance has already paid for an out-of-network emergency.",
+    "CMS_BENCHMARK": "The facility is charging a rate that is significantly higher than the fair market price established by Medicare.",
+    "DRG_OUTLIER": "The hospital claims the patient's case was 'exceptionally difficult' to trigger a massive add-on fee above the standard rate.",
+    "MED_NECESSITY_FAIL": "The patient is forced to pay out-of-pocket because the provider performed a service that insurance considers elective or unnecessary.",
+    "QUANTITY_LIMIT": "The patient is billed for more doses of a drug or units of service than is medically safe or allowed per day.",
+    "MATH_ERROR": "The 'Total' column for a line item is higher than the 'Quantity' multiplied by the 'Unit Price.'",
+    "BALANCE_MISMATCH": "The math on the summary page is wrong, showing a balance due that is higher than the charges minus payments.",
+    "GHOST_PROVIDER": "The bill lists a provider the patient never saw or an ID number for someone who is no longer practicing.",
+    "NPI_INACTIVE": "The patient is being billed by a provider who does not have a valid, active license to practice or bill insurance.",
+    "IMPOSSIBLE_DATE": "The bill includes charges for dates before the patient was admitted or after the patient was discharged."
+};
+
 const app = express();
 const PORT = 4000;
 
@@ -157,6 +183,7 @@ async function generateDraftBill(params) {
         2. **FINANCIALS**: Use irregualar pricing (e.g. $153.42).
         3. **CODES**: Match the specialty.
         4. **SCENARIO**: ${errorType}
+           - **DEFINITION**: "${ERROR_DESCRIPTIONS[errorType] || 'Standard Bill'}"
            - If ${errorType} != CLEAN, try to inject the error logic now.
         
         RETURN JSON with this structure:
@@ -227,6 +254,7 @@ async function auditAndFinalizeBill(draftBill, params) {
         **CONTEXT**:
         - Specialty: ${specialty}
         - Intended Scenario: **${errorType}**
+        - Definition: "${ERROR_DESCRIPTIONS[errorType] || 'Standard'}"
         - Payer: ${payerType}
         - Complexity: ${complexity}
 
@@ -629,6 +657,7 @@ async function analyzeBill(billData, errorType, gfeData = null, mrData = null, g
         ${groundTruth ? `4. **INTERNAL AUDIT NOTES (GROUND TRUTH)**: \n   - Justification: "${groundTruth.justification}"\n   - Intended Error: ${groundTruth.type}` : ''}
 
         **TARGET INVESTIGATION**: "${errorType}"
+        **DEFINITION**: "${ERROR_DESCRIPTIONS[errorType] || 'Execute Standard Audit Logic'}"
 
         **INSTRUCTIONS**:
         1. **CHALLENGE THE LOGIC**: Your primary directive is to **challenge the clinical logic** of the bill. Do not be "polite" or "timid." If the medical data (vitals, diagnosis) does not match the service level, you MUST declare a discrepancy.
