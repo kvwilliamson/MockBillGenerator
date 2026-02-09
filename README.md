@@ -51,7 +51,9 @@ npm run generate:error-detection
     - **Consistent Deception**: Subsequent calculations (Adjustments/Grand Total) are derived from the *bad subtotal*, making the bottom-line math look superficially correct while the sum of line items is secretly invalid.
 - **Phase 4: The Publisher (V2.4 - "Administrative Guard")**:
     - **Fiscal Year Alignment**: Calculates Patient DOB based on admission year (2026) with an off-by-one guard to match stated age exactly.
-- **Phase 5: Compliance Sentinel**: Appends regulatory disclaimers and identifies administrative typos.
+- **Phase 5: The Polish Agent (V2.4)**: Finalizes the bill assembly, ensuring visual consistency and generating the "Provider Note" based on the clinical truth.
+- **Phase 6: Compliance Sentinel (The "Enforcer")**: Scans the final bill to ensure the requested "Gotcha" (Error Scenario) is present. If the AI was too "clean", the Sentinel forcibly injects the error (e.g., modifying dates for `IMPOSSIBLE_DATE` or adding duplicates).
+- **Phase 7: Hard Constraint Enforcer**: A deterministic safety net that fixes logical inconsistencies (e.g., mismatched discharge dates) *UNLESS* the user specifically requested a related error (e.g., it permits date errors if `IMPOSSIBLE_DATE` was requested).
 
 ### 2. Forensic Auditing Engine ("The 10 Guardians - V2.4")
 The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculation anchors.

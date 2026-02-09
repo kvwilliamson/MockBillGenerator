@@ -340,9 +340,13 @@ app.post('/generate-data', async (req, res) => {
         const finalizedData = await auditAndFinalizeBill(draftData, { specialty, errorType, complexity, payerType });
         console.log('[Agent 2] Audit Complete.');
 
+        // --- AGENT 7: THE COMPLIANCE SENTINEL (The Enforcer) ---
+        console.log('[Agent 7] Sentinel is verifying enforcement...');
+        const enforcedData = await runComplianceSentinel(finalizedData, errorType);
+
         // --- HARD CONSTRAINT ENFORCER (Deterministic Logic) ---
-        // This runs AFTER the auditor to physically prevent hallucinations that violate business rules.
-        let data = finalizedData;
+        // This runs AFTER the Sentinel to ensure basics are still valid (dates, complexity)
+        let data = enforcedData;
 
         if (complexity === 'Low') {
             console.log('[Enforcer] Applying Low Complexity Hard Constraints...');
@@ -362,9 +366,9 @@ app.post('/generate-data', async (req, res) => {
                 bill.lineItems.forEach((item, oldIndex) => {
                     let keep = true;
 
-                    // Logic: Keep only one E/M
+                    // Logic: Keep only one E/M (UNLESS Duplicate error)
                     const isEM = item.code.startsWith('992') || item.code.startsWith('G0');
-                    if (isEM) {
+                    if (isEM && errorType !== 'DUPLICATE') {
                         emCodeCount++;
                         if (emCodeCount > 1) {
                             console.log(`[Enforcer] Removing extra E/M Code at original index ${oldIndex}: ${item.code}`);
@@ -373,8 +377,10 @@ app.post('/generate-data', async (req, res) => {
                     }
 
                     if (keep) {
-                        // Force date sync
-                        item.date = bill.admissionDate;
+                        // Force date sync (UNLESS we specifically want an Impossible Date)
+                        if (errorType !== 'IMPOSSIBLE_DATE') {
+                            item.date = bill.admissionDate;
+                        }
                         // Map old index to new index
                         indexMap.set(oldIndex, keptLines.length);
                         keptLines.push(item);
@@ -388,7 +394,7 @@ app.post('/generate-data', async (req, res) => {
 
             // 3. Force Clinic Rev Codes for Internal Medicine / Family Practice
             const isClinicSpecialty = specialty.includes('Internal') || specialty.includes('Family') || specialty.includes('General');
-            if (isClinicSpecialty) {
+            if (isClinicSpecialty && errorType !== 'WRONG_PLACE_OF_SERVICE' && errorType !== 'REVENUE_CODE_MISMATCH') {
                 bill.lineItems.forEach(item => {
                     const isEM = item.code.startsWith('992');
 
@@ -536,13 +542,16 @@ app.post('/generate-data', async (req, res) => {
         }
 
         // 3. Identifier Realism
-        // Overwrite lazy AI placeholders with valid data
-        if (data.bill_data.npi && (data.bill_data.npi.includes('12345') || data.bill_data.npi.length !== 10)) {
-            data.bill_data.npi = generateValidNPI();
+        // Overwrite lazy AI placeholders with valid data (UNLESS we want a Ghost/Inactive provider)
+        if (errorType !== 'GHOST_PROVIDER' && errorType !== 'NPI_INACTIVE') {
+            if (data.bill_data.npi && (data.bill_data.npi.includes('12345') || data.bill_data.npi.length !== 10)) {
+                data.bill_data.npi = generateValidNPI();
+            }
+            if (data.bill_data.attendingNpi && (data.bill_data.attendingNpi.includes('12345') || data.bill_data.attendingNpi === data.bill_data.npi)) {
+                data.bill_data.attendingNpi = generateValidNPI();
+            }
         }
-        if (data.bill_data.attendingNpi && (data.bill_data.attendingNpi.includes('12345') || data.bill_data.attendingNpi === data.bill_data.npi)) {
-            data.bill_data.attendingNpi = generateValidNPI();
-        }
+
         if (data.bill_data.taxId && data.bill_data.taxId.includes('XX')) {
             const r = () => Math.floor(Math.random() * 9);
             data.bill_data.taxId = `${r()}${r()}-${r()}${r()}${r()}${r()}${r()}${r()}${r()}`;
@@ -709,47 +718,151 @@ async function deepDiveAnalysis(billData, params, gfeData = null, mrData = null)
     }
 }
 
-// --- AGENT 7: THE COMPLIANCE SENTINEL (Supplemental Audit) ---
-async function supplementalAudit(billData, existingIssues) {
+// --- AGENT 7: THE COMPLIANCE SENTINEL (The Enforcer) ---
+async function runComplianceSentinel(billData, errorType) {
+    // 0. Short Verification: If CLEAN, just return (or do minor deterministic cleanup if needed)
+    if (errorType === 'CLEAN') return billData;
+
     const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+    console.log(`[Sentinel] Verifying '${errorType}'...`);
 
-    const prompt = `
-        You are "The Compliance Sentinel". Your goal is to find non-financial errors on this medical bill.
+    // 1. VERIFICATION PHASE
+    const verifyPrompt = `
+        You are The Compliance Sentinel (Quality Assurance).
         
-        **CRITICAL**: DO NOT REPEAT issues related to pricing, overcharges, or the 9 Guardians.
+        **TASK**: Verify if the following bill contains the specific error scenario: "${errorType}".
+        **DEFINITION**: ${ERROR_DESCRIPTIONS[errorType] || 'Standard Error'}
         
-        **SYSTEM TRUTHS (MANDATORY)**:
-        1. **TOB 131** is ALWAYS correct and standard for Emergency/Outpatient visits. (DO NOT FLAG).
-        2. **NPIs** must be 10 digits and generally start with '1' or '2'. (DO NOT FLAG if 10 digits).
-        3. **Tax IDs** (EINs) are standard in the XX-XXXXXXX format. (DO NOT FLAG).
-        4. **Clinical Scaling**: ER Visit levels (99281-99285) and Office levels (99202-99215) must scale reasonably with severity.
-        5. **Age Calculation (BKM)**: Perform subtraction yourself. If Current Year is 2026 and Birth Year is 1995, the patient is 31. They are NOT a minor. DO NOT misidentify adults as minors.
+        **BILL DATA**:
+        ${JSON.stringify(billData)}
         
-        **FOCUS ON**:
-        1. **Administrative Errors**: Typos in names, non-10-digit NPIs.
-        2. **Compliance**: Missing legal disclaimers.
-        3. **Identity**: Cross-referencing patient details for inconsistency.
-
-        **DATA**:
-        - Bill: ${JSON.stringify(billData)}
-        - Already Identified Financial Issues: ${JSON.stringify(existingIssues)}
-
         **RETURN JSON**:
-        {
-            "supplemental_findings": [
-                {
-                    "category": "Admin" | "Compliance" | "Technical",
-                    "issue": "Specific finding",
-                    "impact": "Potential impact (e.g. claim denial risk)",
-                    "severity": "Low" | "Medium"
-                }
-            ]
-        }
+        { "has_error": boolean, "reason": "Short explanation" }
     `;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return parseAndValidateJSON(text.replace(/[^\x00-\x7F]/g, ""));
+    try {
+        const verifyRes = await model.generateContent(verifyPrompt);
+        const verifyData = parseAndValidateJSON(verifyRes.response.text());
+
+        if (verifyData.has_error) {
+            console.log(`[Sentinel] Verification PASS. Error '${errorType}' detected.`);
+            return billData; // All good
+        }
+
+        console.log(`[Sentinel] Verification FAIL. Error '${errorType}' NOT detected. Initiating Injection Protocol...`);
+
+        // 2. STRATEGY PHASE (The Plan)
+        const planPrompt = `
+            You are The Compliance Sentinel.
+            The user REQUESTED the error: "${errorType}".
+            **DEFINITION**: ${ERROR_DESCRIPTIONS[errorType] || 'Standard Error'}
+            However, the current bill is CLEAN/MISSING this error.
+            
+            **GOAL**: Propose a **SIMPLE JSON MODIFICATION** to inject this error into the 'bill_data'.
+            
+            **CONSTRAINTS**:
+            - Do NOT rewrite the whole bill.
+            - Change 1-2 fields max (e.g. change a Qty, Date, Code, or Price).
+            - If it requires complex clinical rewriting (e.g. RECORD_MISMATCH), return "FAIL".
+            
+            **INSTRUCTIONS FOR SPECIFIC GOTCHAS**:
+            - **DUPLICATE**: Pick a line index to duplicate.
+            - **QTY_ERROR**: Multiply a quantity by 10.
+            - **UPCODING**: Change a CPT code to a higher level (e.g. 99283 -> 99285).
+            - **MISSING_MODIFIER**: Remove a modifier string.
+            - **MATH_ERROR**: Change the 'total' field of a line item to be mathematically wrong.
+            - **IMPOSSIBLE_DATE**: Change the 'date' of ONE line item to be 1 day BEFORE the 'admissionDate'.
+            - **GHOST_PROVIDER**: Change 'npi' to "9999999999".
+            - **NPI_INACTIVE**: Change 'npi' to "1000000000" (A valid format but likely inactive/generic).
+            
+            **CURRENT BILL**:
+            ${JSON.stringify(billData)}
+            
+            **RETURN JSON**:
+            {
+                "can_inject": boolean,
+                "strategy_description": "String explaining the change",
+                "modifications": [
+                    {
+                        "target": "lineItems" | "header", 
+                        "index": number, // Index of line item (if target is lineItems)
+                        "field": "key_name", // e.g. "qty", "code", "npi", "total", "date"
+                        "new_value": "value" // The new value to set
+                    },
+                    {
+                        "target": "operation",
+                        "action": "DUPLICATE_LINE",
+                        "index": number
+                    },
+                     {
+                        "target": "operation",
+                        "action": "ADD_LINE",
+                        "lineItem": { ...object... }
+                    }
+                ]
+            }
+        `;
+
+        const planRes = await model.generateContent(planPrompt);
+        const planData = parseAndValidateJSON(planRes.response.text());
+
+        if (!planData.can_inject) {
+            console.log(`[Sentinel] Injection Failed: Too complex to inject '${errorType}'.`);
+            return billData; // Return original if we can't fix it
+        }
+
+        console.log(`[Sentinel] Executing Plan: ${planData.strategy_description}`);
+
+        // 3. EXECUTION PHASE (The Act)
+        const newBill = JSON.parse(JSON.stringify(billData)); // Deep Copy
+
+        if (planData.modifications) {
+            planData.modifications.forEach(mod => {
+                try {
+                    if (mod.target === 'header') {
+                        newBill.bill_data[mod.field] = mod.new_value;
+                    } else if (mod.target === 'lineItems') {
+                        if (newBill.bill_data.lineItems && newBill.bill_data.lineItems[mod.index]) {
+                            newBill.bill_data.lineItems[mod.index][mod.field] = mod.new_value;
+                        }
+                    } else if (mod.target === 'operation') {
+                        if (mod.action === 'DUPLICATE_LINE') {
+                            const itemToClone = newBill.bill_data.lineItems[mod.index];
+                            if (itemToClone) {
+                                newBill.bill_data.lineItems.push({ ...itemToClone }); // Clone
+                            }
+                        } else if (mod.action === 'ADD_LINE') {
+                            if (mod.lineItem) {
+                                newBill.bill_data.lineItems.push(mod.lineItem);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("[Sentinel] Modification Error:", e);
+                }
+            });
+        }
+
+        // Add a meta-marker so we know the Sentinel intervened
+        if (!newBill.bill_data.meta) newBill.bill_data.meta = {};
+        newBill.bill_data.meta.sentinel_intervention = true;
+        newBill.bill_data.meta.sentinel_action = planData.strategy_description;
+
+        // Add Telemetry for Frontend
+        if (!newBill.simulation_debug) newBill.simulation_debug = {};
+        newBill.simulation_debug.sentinel_truth = {
+            status: "INTERVENED",
+            error_requested: errorType,
+            action_taken: planData.strategy_description,
+            modifications: planData.modifications
+        };
+
+        return newBill;
+
+    } catch (error) {
+        console.error("[Sentinel] Error during enforcement loop:", error);
+        return billData; // Fail safe
+    }
 }
 
 // ----------------------------------------------------
@@ -1593,8 +1706,70 @@ app.post('/generate-data-v2', async (req, res) => {
         console.log(`[4/5] Pricing Sentry: ${pricingAudit.status}`);
 
         // 5. Polish
-        const finalOutput = await generatePolishAgent(clinical.clinical_truth, coding.coding_truth, financial, { specialty, payerType, errorType, complexity, facility });
+        let finalOutput = await generatePolishAgent(clinical.clinical_truth, coding.coding_truth, financial, { specialty, payerType, errorType, complexity, facility });
         console.log('[5/5] Polish: Bill Assembled.');
+
+        // 6. COMPLIANCE SENTINEL (The Enforcer) - V2 Integration
+        // This ensures the requested "Gotcha" is actually present.
+        console.log(`[6/6] Sentinel: Verifying '${errorType}'...`);
+        finalOutput = await runComplianceSentinel(finalOutput, errorType);
+
+        // 7. HARD CONSTRAINT ENFORCER (Deterministic Safety Net)
+        // Ported from V1, but conditioned to respect the Sentinel's work.
+        if (complexity === 'Low') {
+            console.log('[Enforcer V2] Applying Low Complexity Constraints...');
+            const bill = finalOutput.bill_data;
+
+            // 1. Force Single Day Duration (UNLESS Impossible Date)
+            if (errorType !== 'IMPOSSIBLE_DATE') {
+                bill.dischargeDate = bill.admissionDate;
+            }
+
+            // 2. Filter Multi-Day Lines
+            if (bill.lineItems && bill.lineItems.length > 0) {
+                let emCodeCount = 0;
+                const keptLines = [];
+                bill.lineItems.forEach((item) => {
+                    let keep = true;
+                    // Logic: Keep only one E/M (UNLESS Duplicate error)
+                    const isEM = item.code.startsWith('992') || item.code.startsWith('G0');
+                    if (isEM && errorType !== 'DUPLICATE') {
+                        emCodeCount++;
+                        if (emCodeCount > 1) keep = false;
+                    }
+
+                    if (keep) {
+                        // Force date sync (UNLESS Impossible Date)
+                        if (errorType !== 'IMPOSSIBLE_DATE') {
+                            item.date = bill.admissionDate;
+                        }
+                        keptLines.push(item);
+                    }
+                });
+                bill.lineItems = keptLines;
+            }
+
+            // 3. Force Clinic Rev Codes
+            const isClinicSpecialty = specialty.includes('Internal') || specialty.includes('Family') || specialty.includes('General');
+            if (isClinicSpecialty && errorType !== 'WRONG_PLACE_OF_SERVICE' && errorType !== 'REVENUE_CODE_MISMATCH') {
+                bill.lineItems.forEach(item => {
+                    const isEM = item.code.startsWith('992');
+                    if (item.code.match(/9928[1-5]/)) { // ER -> Clinic
+                        item.code = '99214';
+                        item.description = 'OFFICE/OUTPATIENT VISIT EST';
+                        item.revCode = '0510';
+                    }
+                    if (isEM && item.revCode === '0450') item.revCode = '0510'; // ER Rev -> Clinic Rev
+                });
+            }
+        }
+
+        // 3. Identifier Realism (NPI/TaxID) - Ported Check
+        if (errorType !== 'GHOST_PROVIDER' && errorType !== 'NPI_INACTIVE') {
+            if (finalOutput.bill_data.npi && finalOutput.bill_data.npi.includes('12345')) {
+                finalOutput.bill_data.npi = generateValidNPI();
+            }
+        }
 
         // 5. Envelope
         const sExp = ABB_MAP[specialty] || specialty.substring(0, 3).toUpperCase();
@@ -1616,7 +1791,8 @@ app.post('/generate-data-v2', async (req, res) => {
                 coding_truth: coding.coding_truth,
                 financial_truth: financial,
                 pricing_audit: pricingAudit,
-                polish_truth: finalOutput.bill_data
+                polish_truth: finalOutput.bill_data,
+                sentinel_truth: finalOutput.simulation_debug?.sentinel_truth || null
             }
         };
 
