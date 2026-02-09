@@ -7,6 +7,36 @@ To produce Best Known Method (BKM) real-world mock bills that look 100% authenti
 
 ---
 
+## ⚡ Quick Start
+
+### Prerequisites
+- Node.js (v18+)
+- Google Gemini API Key (`GEMINI_API_KEY` in `.env`)
+
+### Installation & Running
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start the Full Stack (React Client + Node Server)
+npm run dev
+
+# 3. Open in Browser
+# Client: http://localhost:5173
+# Server: http://localhost:4000
+```
+
+### Generating Test Data
+```bash
+# Generate Classification Test Fixtures (EOB, MSN, Medical Records)
+npm run generate:classification
+
+# Generate Batch Error Detection Bills
+npm run generate:error-detection
+```
+
+---
+
 ## 🛠 Features
 
 ### 1. The V2.4 "Forensic" Generation Chain
@@ -26,13 +56,16 @@ To produce Best Known Method (BKM) real-world mock bills that look 100% authenti
 ### 2. Forensic Auditing Engine ("The 10 Guardians - V2.4")
 The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculation anchors.
 
-1.  **Agent #7: Deterministic Math Guardian**: No longer uses AI for arithmetic. Performs a **Bottom-Up JS Summation** of every line item to detect $0.01 discrepancies or poisoned subtotals.
-2.  **Agent #10: The Simulation Judge (V2.4)**: 
-    - **Arithmetic Meta-Audit**: Perform its own hard math check on the raw data. If a guardian claims "Totals match" on a poisoned subtotal, the Judge issues a **"Logic Gap Detected"** and drops the fidelity score to 0.
-    - **Strict Scenario Mapping**: Error detection *must* match the intended scenario (e.g., catching a modifier error during a Math test is a Logic Gap).
-3.  **Deterministic Price Sentry**: Pricing logic is handled by Javascript. Triggered only if math exceeds Benchmark + 20%.
-4.  **Upcoding Guardian (Clinical Anchors)**: Uses hard thresholds (e.g., hypoxia < 90% or pain 9/10) to validate high-intensity billing.
-5.  **Modifier Sentinel**: Enforces "Non-Negotiable" CPT rules. Checks for the -25 rule (E/M + Procedure) and Laterality mandates.
+1.  **🧮 Math Guardian**: Deterministic JS Summation. Checks for $0.05 line discrepancies and poisoned subtotals.
+2.  **⚖️ Judge (Meta-Audit)**: Evaluates "Scenario Fidelity". If a bill claims to have a Math Error but the Math Guardian passes, the Judge flags a "Logic Gap".
+3.  **💊 Price Sentry**: Checks Unit Prices against Medicare/Commercial benchmarks.
+4.  **📈 Upcoding Guardian**: Validates clinical necessity (e.g., Vitals vs. CPT Level).
+5.  **🏷️ Modifier Sentinel**: Enforces `-25`, `-26`, `-TC`, and `-50` rules.
+6.  **📦 Unbundling Guardian**: Detects fragmented codes (e.g., Panel + Component).
+7.  **🔄 Duplicate Guardian**: Checks for duplicate line items on the same DOS.
+8.  **⏱️ Global Period Guardian**: Checks for post-op billing violations.
+9.  **🏗️ Quantity Guardian**: Enforces Medically Unlikely Edits (MUE) and quantity limits.
+10. **📝 GFE/Review Guardian**: Validates against Good Faith Estimates and performs a final "Common Sense" review.
 
 ---
 
@@ -50,9 +83,13 @@ The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculat
 
 ## 📂 Project Structure
 - `/client`: React (Vite) Frontend.
-- `/guardians`: The 10 specialized forensic audit modules.
 - `/server.js`: The Multi-Agent Orchestrator and Infiltrator logic.
-- `.agent/workflows`: Developer automation and testing clusters.
+- `/guardians`: The 10 specialized forensic audit modules.
+    - `orchestrator.js`: Parallel execution engine.
+    - `math.js`, `upcoding.js`, etc.: Individual guardian logic.
+- `/tests`: Unit testing suite for guardians (`test_guardians.js`).
+- `generate-classification-tests.mjs`: Generator for OCR training fixtures (EOB, MSN, etc.).
+- `generate-error-detection-bills.mjs`: Generator for batch error testing.
 
 ---
 
