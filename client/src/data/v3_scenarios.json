@@ -1,0 +1,212 @@
+[
+    {
+        "id": "1",
+        "label": "ER E/M Level Inflation",
+        "description": "ER visit billed at Level 5 without supporting complexity",
+        "narrative": "Patient presents to the ER with mild chest discomfort. Vitals stable, ECG performed."
+    },
+    {
+        "id": "2",
+        "label": "Trauma Activation Abuse",
+        "description": "Trauma activation fee billed without trauma criteria",
+        "narrative": "Minor fall at home; patient brought to trauma center. No major injuries."
+    },
+    {
+        "id": "3",
+        "label": "Observation → Inpatient Inflation",
+        "description": "Observation stay billed as inpatient admission",
+        "narrative": "Patient admitted overnight for dehydration. Doctor notes fluids and vitals monitoring."
+    },
+    {
+        "id": "4",
+        "label": "ICU Level Inflation",
+        "description": "ICU room charges without ICU-level services",
+        "narrative": "Patient monitored on general ward post-op; no ICU care required."
+    },
+    {
+        "id": "5",
+        "label": "Surgical Unbundling",
+        "description": "Bundled surgical services billed separately",
+        "narrative": "Laparoscopic appendectomy performed; surgery, anesthesia, closure documented."
+    },
+    {
+        "id": "6",
+        "label": "Lab Panel Fragmentation",
+        "description": "Lab panels split into individual tests",
+        "narrative": "Routine metabolic panel ordered; lab reports sodium, potassium, creatinine, glucose."
+    },
+    {
+        "id": "7",
+        "label": "Radiology Component Fragmentation",
+        "description": "Technical and professional components fragmented",
+        "narrative": "Abdominal CT with contrast; radiologist performs reading and tech work."
+    },
+    {
+        "id": "8",
+        "label": "ER Charge Stacking",
+        "description": "Routine ER services billed à la carte",
+        "narrative": "Minor laceration treated in ER; basic exam and dressing."
+    },
+    {
+        "id": "9",
+        "label": "Modifier -25 Abuse",
+        "description": "E/M billed with minor procedure using -25",
+        "narrative": "Routine office visit plus minor wart removal."
+    },
+    {
+        "id": "10",
+        "label": "Modifier -59 Abuse",
+        "description": "Modifier used to bypass bundling edits",
+        "narrative": "Multiple injections during same visit."
+    },
+    {
+        "id": "11",
+        "label": "Anesthesia Time Padding",
+        "description": "Anesthesia time exceeds OR duration",
+        "narrative": "Knee arthroscopy with general anesthesia."
+    },
+    {
+        "id": "12",
+        "label": "Observation Hour Inflation",
+        "description": "Observation billed at excessive hours",
+        "narrative": "Overnight observation for mild asthma exacerbation."
+    },
+    {
+        "id": "13",
+        "label": "OR / PACU Time Overstatement",
+        "description": "Operating and recovery time overstated",
+        "narrative": "Knee arthroscopy; surgery 45 min, PACU 30 min."
+    },
+    {
+        "id": "14",
+        "label": "Drug Unit Overbilling",
+        "description": "Drug units exceed standard dosing",
+        "narrative": "IV antibiotic given 2 doses."
+    },
+    {
+        "id": "15",
+        "label": "Supply Quantity Inflation",
+        "description": "Excess supply quantities billed",
+        "narrative": "Patient receives 3 wound dressings."
+    },
+    {
+        "id": "16",
+        "label": "Duplicate CPT Billing",
+        "description": "Same CPT billed twice same date",
+        "narrative": "Single radiograph performed once."
+    },
+    {
+        "id": "17",
+        "label": "Ghost (Phantom) Services",
+        "description": "Services billed but never rendered",
+        "narrative": "Physical therapy consult ordered but not performed."
+    },
+    {
+        "id": "18",
+        "label": "Late-Posted Charges",
+        "description": "Charges added after discharge",
+        "narrative": "Patient discharged; later lab results posted."
+    },
+    {
+        "id": "19",
+        "label": "Assistant Surgeon Abuse",
+        "description": "Assistant surgeon billed without support",
+        "narrative": "Appendectomy with surgical assistant present."
+    },
+    {
+        "id": "20",
+        "label": "Anesthesia Direction Abuse",
+        "description": "Medical direction billed improperly",
+        "narrative": "Anesthesia supervised by anesthesiologist but performed by resident."
+    },
+    {
+        "id": "21",
+        "label": "Outpatient Facility Fee Abuse",
+        "description": "Facility fee added to clinic visit",
+        "narrative": "Routine outpatient clinic visit."
+    },
+    {
+        "id": "22",
+        "label": "Place-of-Service Inflation",
+        "description": "Hospital POS used for routine care",
+        "narrative": "Telehealth follow-up incorrectly coded as in-clinic."
+    },
+    {
+        "id": "23",
+        "label": "J-Code Markup Abuse",
+        "description": "Injectable drugs billed far above cost",
+        "narrative": "IV chemotherapy administered."
+    },
+    {
+        "id": "24",
+        "label": "Oral Med Inpatient Pricing",
+        "description": "Common oral meds billed at IP rates",
+        "narrative": "Inpatient oral antibiotics."
+    },
+    {
+        "id": "25",
+        "label": "No Self-Pay Discount",
+        "description": "Full chargemaster pricing applied",
+        "narrative": "Patient paying cash."
+    },
+    {
+        "id": "26",
+        "label": "Cash-Pay Rate Inversion",
+        "description": "Self-pay charged more than insurers",
+        "narrative": "Self-pay patient; negotiated insurance rate lower."
+    },
+    {
+        "id": "27",
+        "label": "No Surprises Act Violation",
+        "description": "OON ancillary billing in protected care",
+        "narrative": "Out-of-network imaging in emergency."
+    },
+    {
+        "id": "28",
+        "label": "GFE Overrun",
+        "description": "Final bill exceeds GFE by >$400",
+        "narrative": "Patient received GFE $500 for knee MRI; actual $900."
+    },
+    {
+        "id": "29",
+        "label": "Revenue Code Misclassification",
+        "description": "Incorrect revenue code inflates charges",
+        "narrative": "Infusion administered in outpatient clinic."
+    },
+    {
+        "id": "30",
+        "label": "Preventive → Diagnostic Misbilling",
+        "description": "Preventive care billed as diagnostic",
+        "narrative": "Annual wellness visit performed; preventive documented."
+    },
+    {
+        "id": "31",
+        "label": "Length-of-Stay Padding",
+        "description": "Extra inpatient days without services",
+        "narrative": "Patient admitted 2 nights for mild pneumonia."
+    },
+    {
+        "id": "32",
+        "label": "Supply Kit Double Billing",
+        "description": "Kit billed plus individual components",
+        "narrative": "Wound kit used for dressing change."
+    },
+    {
+        "id": "33",
+        "label": "Tech / Prof Duplicate Imaging",
+        "description": "Both components billed redundantly",
+        "narrative": "X-ray read by radiologist; technical component billed twice."
+    },
+    {
+        "id": "34",
+        "label": "Max Observation Edge Case",
+        "description": "Observation billed at upper limit",
+        "narrative": "Patient observed 23 hours for mild dehydration."
+    },
+    {
+        "id": "35",
+        "label": "Disposable Device Markup",
+        "description": "Single-use device billed at extreme rate",
+        "narrative": "Single-use orthopedic device administered."
+    }
+]

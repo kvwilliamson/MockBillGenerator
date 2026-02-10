@@ -118,7 +118,9 @@ function getBasePrice(cpt) {
     return 45 + (Math.random() * 80);
 }
 
-// --- Routes ---
+import { generateV3Bill } from './server/v3_engine/orchestrator.js';
+
+// --- CONSTANTS ---
 
 // --- AGENT 1: THE WRITER (Generation Pass) ---
 async function generateDraftBill(params) {
@@ -1828,6 +1830,23 @@ app.post('/generate-data-v2', async (req, res) => {
 
     } catch (error) {
         console.error('[V2 Error]', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- V3 ENDPOINT (CANONICAL BILLS) ---
+app.post('/generate-data-v3', async (req, res) => {
+    try {
+        const { scenarioId } = req.body;
+        console.log(`[V3 Request] Generating Scenario ID: ${scenarioId}`);
+
+        // Pass the initialized genAI model to the orchestrator
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+
+        const v3Result = await generateV3Bill(model, scenarioId);
+        res.json(v3Result);
+    } catch (error) {
+        console.error('[V3 Error]', error);
         res.status(500).json({ error: error.message });
     }
 });
