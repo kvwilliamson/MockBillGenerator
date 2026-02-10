@@ -77,7 +77,7 @@ function App() {
 
     const [loading, setLoading] = useState(false); // Kept for general loading (PDFs/Analysis)
     const [activeGenerator, setActiveGenerator] = useState(null); // 'V2' | null
-    const [activeTab, setActiveTab] = useState('V2'); // 'V2' | 'V3'
+    const [activeTab, setActiveTab] = useState('V3'); // 'V2' | 'V3'
 
     // V2 State
     const [errorType, setErrorType] = useState('CLEAN');
