@@ -87,17 +87,20 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
             -   **Laboratory (8xxxx)**: ALL routine labs (CBC, BMP, Troponin) are Facility ONLY (Technical component). Do NOT put these on the Pro bill.
             -   **Nursing/Admin (3xxxx, 9xxxx)**: Venipuncture (36415), IV Infusion (96360), Vaccines (G0001). Facility ONLY.
             -   **Facility E/M**: The Room Fee (e.g. 99285).
-            -   **Radiology Tech**: The machine use (e.g. 71045).
             
-        2.  **PROFESSIONAL BILL (CMS-1500) ONLY**:
+        2.  **SHARED ITEMS (Radiology/Cardiology)**:
+            -   **Technical Component (-TC)**: Goes on **FACILITY BILL**. Append modifier `- TC` (e.g. 71045-TC).
+            -   **Professional Component (-26)**: Goes on **PROFESSIONAL BILL**. Append modifier `- 26` (e.g. 71045-26).
+            -   **Example**: Chest X-Ray (71045) must appear on BOTH bills, but with different modifiers.
+            
+        3.  **PROFESSIONAL BILL (CMS-1500) ONLY**:
             -   **Professional E/M**: The Doctor's time (e.g. 99285).
-            -   **Interpretations (-26)**: Radiology interpretations (e.g. 71045-26).
-            -   **Surgical Procedures**: Doctor's fee for procedures (e.g. 12001 Repair).
+            -   **Surgical Procedures**: Doctor's fee only (e.g. 12001).
             
         **EXAMPLE SPLIT**:
-        - CBC (85025) -> Facility Bill [YES], Pro Bill [NO].
-        - X-Ray (71045) -> Facility Bill [YES (Tech)], Pro Bill [YES (Interp -26)].
-        - ER Visit -> Facility Bill [99285], Pro Bill [99285].
+        - CBC (85025) -> Facility: [85025], Pro: [NONE].
+        - X-Ray (71045) -> Facility: [71045-TC], Pro: [71045-26].
+        - ER Visit -> Facility: [99285], Pro: [99285].
         
         **RETURN JSON**:
         {

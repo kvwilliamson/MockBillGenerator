@@ -89,7 +89,7 @@ function App() {
     const [selectedScenarioId, setSelectedScenarioId] = useState(v3Scenarios[0]?.id || '1');
     const [v3PayerType, setV3PayerType] = useState('Self-Pay');
     const [splitTab, setSplitTab] = useState('FACILITY'); // 'FACILITY' | 'PROFESSIONAL'
-    const [splitDownloadMode, setSplitDownloadMode] = useState('COMBINED'); // 'COMBINED' | 'SEPARATE'
+    const [splitDownloadMode, setSplitDownloadMode] = useState('SEPARATE'); // 'COMBINED' | 'SEPARATE'
     const [reviewReport, setReviewReport] = useState(null); // Phase 7 Report
     const [agentLogs, setAgentLogs] = useState([]); // Telemetry Logs
 
@@ -137,7 +137,7 @@ function App() {
             // Assuming setShowConfetti is defined elsewhere or intended to be added.
             // For now, commenting it out to avoid a reference error if not defined.
             // setShowConfetti(true); 
-            if (response.data.bill_data) {
+            if (response.data.bill_data || response.data.mode === 'SPLIT') {
                 setGeneratedData(response.data);
                 // Also set MR data if available from Clinical Architect
                 if (response.data.clinical_truth) {

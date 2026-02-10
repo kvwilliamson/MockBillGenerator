@@ -16,17 +16,16 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         ${JSON.stringify(codedServices)}
         
         **PRICING RULES**:
-        1. **Facility Fee Pricing (Chargemaster)**:
-           - Use HUGE markups (5x-10x Medicare).
-           - E/M Codes (99285) -> $2,000 - $5,000.
-           - CT Scans -> $3,000 - $8,000.
-           - Meds -> $50 - $200 per pill.
-           - **ENTROPY**: Add random cents (e.g. $485.25).
-           
-        2. **Professional Fee Pricing (Doctor's Bill)**:
-           - LOWER than Facility. (2x-3x Medicare).
-           - E/M Codes (99285 Pro) -> $200 - $600.
-           - Interpretations (-26) -> $30 - $150.
+        1.  **Facility Fee Pricing (Chargemaster)**:
+            -   **E/M Codes (99xxx)**: $2,000 - $5,000 (ER Room Fee).
+            -   **Labs/Nursing**: High markup (5x-10x).
+            -   **Technical Components (-TC)**: Price at ~80% of Global Fee. (e.g. CT Scan Global $4000 -> TC $3200).
+            -   **ENTROPY**: Add random cents (e.g. $485.25).
+            
+        2.  **Professional Fee Pricing (Doctor's Bill)**:
+            -   **E/M Codes (99xxx)**: $200 - $600 (Doctor's Time).
+            -   **Professional Components (-26)**: Price at ~20% of Global Fee. (e.g. CT Scan Global $4000 -> 26 $800).
+            -   **Surgical**: Standard surgeon fees.
            
         3. **Rev Codes**:
            - **Laboratory (8xxxx)**: ALWAYS use **0300** (General) or **0301**. NEVER use 0450 for labs.

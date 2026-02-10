@@ -7,16 +7,33 @@ import { parseAndValidateJSON } from '../utils.js';
 export async function generateReviewer(model, finalBillData, clinicalTruth, codingTruth, scenario) {
     // ADAPTIVE REVIEW: Handle Split vs Global
     const billData = finalBillData; // Rename for clarity based on new logic
-    const dataToReview = billData.mode === 'SPLIT' ? billData.facilityBill.bill_data : (billData.bill_data || billData);
 
-    // Validate inputs (Quick Check)
-    if (!dataToReview || !dataToReview.provider) {
-        console.warn("[V3 Reviewer] Invalid bill data structure. Skipping review.");
-        return {
-            detectableFromBill: false,
-            explanation: "Invalid bill data structure provided for review.",
-            missingInfo: "N/A"
-        };
+    let reviewContext = "";
+    let reviewTotal = 0;
+
+    if (billData.mode === 'SPLIT') {
+        // COMBINED REVIEW FOR SPLIT BILL
+        const facItems = billData.facilityBill.bill_data.lineItems.map(s => `[FACILITY] ${s.code}: ${s.desc} ($${s.total})`).join('\n');
+        const proItems = billData.professionalBill.bill_data.lineItems.map(s => `[PROFESSIONAL] ${s.code}: ${s.desc} ($${s.total})`).join('\n');
+
+        reviewContext = `
+        **COMBINED SPLIT BILL**:
+        --- FACILITY CHARGES ---
+        ${facItems}
+        
+        --- PROFESSIONAL CHARGES ---
+        ${proItems}
+        `;
+        reviewTotal = (parseFloat(billData.facilityBill.bill_data.grandTotal) + parseFloat(billData.professionalBill.bill_data.grandTotal)).toFixed(2);
+    } else {
+        // GLOBAL BILL REVIEW
+        const dataToReview = billData.bill_data || billData;
+        if (!dataToReview || !dataToReview.lineItems) {
+            console.warn("[V3 Reviewer] Invalid bill data structure. Skipping review.");
+            return { detectableFromBill: false, explanation: "Invalid data.", missingInfo: "N/A" };
+        }
+        reviewContext = `**GLOBAL BILL**: \n${dataToReview.lineItems.map(s => s.code + ": " + s.desc).join('\n')}`;
+        reviewTotal = dataToReview.grandTotal;
     }
 
     const prompt = `
@@ -27,9 +44,8 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         **NARRATIVE TRUTH**: "${scenario.narrative}"
         
         **BILL TO REVIEW**:
-        - Facility: ${dataToReview.provider.name}
-        - Total: $${dataToReview.grandTotal}
-        - CPT Codes: ${JSON.stringify(dataToReview.lineItems.map(s => s.code + ": " + s.desc))}
+        - Total Charges: $${reviewTotal}
+        ${reviewContext}
         
         **CLINICAL RECORD**:
         ${JSON.stringify(clinicalTruth.encounter)}
