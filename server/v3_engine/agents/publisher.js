@@ -12,15 +12,22 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
     stmtDate.setDate(dosDate.getDate() + lagDays);
     const statementDateStr = stmtDate.toISOString().split('T')[0];
 
-    // Add Timestamps to Service Dates (Technical Noise)
-    // Sort Line Items logically (Labs -> E/M -> Meds/Procedures)
+    // CLINICAL LIFECYCLE SORTING
+    // Sequence: Reg/Nursing -> Labs/Imaging -> Meds/Procedures -> Doctor (E/M)
     const sortedItems = [...financial.line_items].sort((a, b) => {
         const getScore = (cpt) => {
-            if (cpt.startsWith('8')) return 1; // Labs first
-            if (cpt.startsWith('7')) return 2; // Imaging
-            if (cpt.startsWith('99')) return 3; // E/M (Doctor sees patient)
-            if (cpt.startsWith('9') || cpt.startsWith('J')) return 4; // Procedures/Meds
-            return 5;
+            // Revenue Codes are decent proxies for "Phase of Care"
+            // 0450/0510 (General) -> Nursing/Registration (Phase 1)
+            // 8xxxx (Labs) -> Diagnostics (Phase 2)
+            // 7xxxx (Imaging) -> Diagnostics (Phase 2)
+            // 9xxxx / Jxxxx -> Treatment (Phase 3)
+            // 992xx (E/M) -> Disposition (Phase 4 - LAST)
+
+            if (cpt.startsWith('99')) return 10; // E/M IS ALWAYS LAST (Disposition)
+            if (cpt.startsWith('8') || cpt.startsWith('7')) return 2; // Diagnostics
+            if (cpt.startsWith('J') || cpt.startsWith('9')) return 5; // Treatment
+            if (a.rev_code === '0450' || a.rev_code === '0510') return 1; // Room Charges (Registration)
+            return 3;
         };
         return getScore(a.cpt) - getScore(b.cpt);
     });
@@ -64,7 +71,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
 
     if (payerType === 'Self-Pay') {
         insuranceName = "Uninsured / Self-Pay";
-        faStatus = "**Status**: Financial Assistance Application Pending. Please verify income documents.";
+        faStatus = "**Status**: Financial Assistance Application Pending. (Gross Charges Applied)";
     }
     if (payerType === 'High-Deductible') insuranceName = `${insuranceName} (HDHP)`;
 

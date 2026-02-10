@@ -118,9 +118,7 @@ export const BillTemplate = ({ data }) => {
                     <div style={{ textAlign: 'right' }}>
                         <h2 style={{ margin: 0, color: theme.id === 'urgent' ? theme.primaryColor : '#333' }}>PATIENT STATEMENT</h2>
                         <p style={{ fontSize: '14px', fontWeight: 'bold' }}>{data.labels?.account || 'Account'}: {accountNumber}</p>
-                        <div style={{ border: '1px solid #999', padding: '2px 5px', display: 'inline-block', marginTop: '5px', fontSize: '10px' }}>
-                            {data.labels?.tob || 'TOB'}: {data.tob || '131'}
-                        </div>
+
                     </div>
                 </div>
             )}

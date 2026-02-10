@@ -25,11 +25,15 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
              * **Self-Pay (Uncontracted)**: Use **3.0x to 5.0x** (Chargemaster Rate). This shows the full "Sticker Price".
              * **Commercial / High-Deductible (Contracted)**: Use **1.5x to 2.0x** (Negotiated Rate). This reflects the discount insurance companies get.
            - **STEP 3**: Apply Multiplier to set the 'Billed Charge'.
-           - **Result**: Self-Pay bills look "Predatroy" ($385 for $100 service), Insured bills look "High but Managed" ($180 for $100 service).
+           - **PRICING ENTROPY (QUARTER ROUNDING)**: 
+             * Do not use flat integers, but don't use random cents like .23 or .12.
+             * **Rule**: Apply the Multiplier + Random variation (-5% to +5%).
+             * **CRITICAL**: Round the final result to the **NEAREST $0.25**.
+             * **Examples**: $384.25, $391.50, $85.75, $100.00. (NEVER $384.23).
            
-        3. **ANCILLARY ITEMS**: Use the same Multiplier Logic (3-5x for Self-Pay, 1.5x for Insured).
-           - Labs: Medicare Avg $15 -> Bill $65.00
-           - Venipuncture: Medicare Avg $20 -> Bill $85.00
+        3. **ANCILLARY ITEMS**: Use the same Multiplier + Entropy Logic.
+           - Labs: Medicare Avg $15 -> Bill $65.43
+           - Venipuncture: Medicare Avg $20 -> Bill $85.12
            - Supplies: Mark up 5x cost.
         
         4. Calculate "Total Charge" (Unit Price * Quantity).
@@ -47,9 +51,9 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
 
         6. **PAYER LOGIC (IMPORTANT)**: 
            - **IF Payer is 'Self-Pay'**: 
-             * Adjustment = $0.00. 
+             * Adjustment = $0.00. (CRITICAL: Show NO discounts).
              * Patient Responsibility = Total Charge. 
-             * (Realism: Self-pay patients rarely get discounts automatically).
+             * (Realism: This illustrates the "Hidden Penalty" of being uninsured).
            - **IF Payer is 'Commercial' or 'High-Deductible'**: 
              * Adjustment = 30-50% of Total Charge (Contractual Write-off).
              * Patient Responsibility = Remainder (Co-pay/Deductible).

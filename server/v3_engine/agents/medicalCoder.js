@@ -24,9 +24,11 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
            - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the setting (e.g. 9928x for ER, 9920x/9921x for Clinic, 9922x for Inpatient). NEVER bill multiple E/M codes.
            
         3. **DERIVED SERVICES (AND DENSITY)**: Review the *entire* Clinical Record and assign CPT/HCPCS codes.
-           - **SETTING-AGNOSTIC DENSITY LOGIC**:
-             * **Rule A (Clean Bill)**: If the bill is "Clean" (High Level), it MUST act "Busy". Generate appropriate ancillary services for *that specific setting* (e.g. Clinic = PoC Labs/Immunizations; ER = CT/IV/Labs; Inpatient = Daily Labs).
-             * **Rule B (Upcoding/Inflation)**: If the scenario is "Upcoding", you MUST create a **DENSITY MISMATCH**. The E/M Code is High, BUT the ancillary services must match a **Low Complexity** visit for that setting.
+           - **ANCILLARY DENSITY (GRAVITY SCORE)**:
+             * **Analyze the Scenario Intent**: Is this "Clean" or "Upcoding"?
+             * **IF UPCODING (Low Gravity)**: The Goal is to show a mismatch. Generate **ROUTINE/LOW GRAVITY** ancillaries (e.g. basic labs, strep test, urinalysis). Avoid high-tech items like CT/MRI unless strictly necessary.
+             * **IF CLEAN (High Gravity)**: The Bill must justify its high level. Generate **HIGH GRAVITY** ancillaries (e.g. CT Scans, IV Meds, Complex panels).
+             * *Prompt*: "List 3-5 ancillary services for [Diagnosis] that match a [Gravity Score] acuity level."
            
            - **ANCILLARY RESTRAINT**: Only bill for ancillaries explicitly found in the Clinical Record.
            
