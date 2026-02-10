@@ -1,16 +1,18 @@
 import { parseAndValidateJSON } from '../utils.js';
 
+
 /**
  * PHASE 4: THE FINANCIAL CLERK
  * Goal: Apply Pricing and Charges (Hybrid AI/Constraint)
  */
-export async function generateFinancialClerk(model, codedServices, scenario, facility) {
+export async function generateFinancialClerk(model, codedServices, scenario, facility, payerType) {
     const prompt = `
         You are "The Financial Clerk". Your goal is to apply PRICING to the generated CPT codes.
         
         **INPUTS**:
         - CPT Codes: ${JSON.stringify(codedServices.cpt_codes)}
         - Facility Type: ${facility.facilityType} (State: ${facility.state})
+        - Payer Context: ${payerType}
         
         **STRICT BILLING INSTRUCTIONS (FROM BOSS)**:
         "${scenario.billingInstructions}"
@@ -24,13 +26,19 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
            - Supplies: $15 - $100
         4. Calculate "Total Charge" (Unit Price * Quantity).
         5. Assign a "Revenue Code" (3-digit or 4-digit) appropriate for the facility type AND the line item type (e.g., 450 for ER, 300 for Labs, 250 for Pharmacy).
-        
+        6. **DESCRIPTION MAPPING**: 
+           - **CRITICAL**: The input "CPT Codes" has two description fields. You must map them as follows:
+           - Output Field \`description\`: Set this to the Input Field \`billing_description\` (Short/Cryptic).
+           - Output Field \`official_description\`: Set this to the Input Field \`official_description\` (Long/Official).
+           - **DO NOT** use the long description for the main \`description\` field. The bill must look like a cryptic Chargemaster.
+
         **RETURN JSON**:
         {
             "line_items": [
                 {
                     "cpt": "99285",
-                    "description": "Emergency dept visit...",
+                    "description": "HC ED VISIT LVL 5", 
+                    "official_description": "Emergency department visit for the evaluation and management of a patient...", 
                     "rev_code": "0450",
                     "quantity": 1,
                     "unit_price": 1200.00,

@@ -14,8 +14,8 @@ const canonicalInstructions = require('../data/canonical_instructions.json');
 /**
  * V3 ENGINE ORCHESTRATOR
  */
-export async function generateV3Bill(genAI_Model, scenarioId) {
-    console.log(`\n=== STARTING V3 ENGINE (Scenario ID: ${scenarioId}) ===`);
+export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-Pay') {
+    console.log(`\n=== STARTING V3 ENGINE (Scenario ID: ${scenarioId}, Payer: ${payerType}) ===`);
 
     // 0. Load Scenario Instruction
     const scenario = canonicalInstructions.find(s => s.scenarioId === String(scenarioId));
@@ -33,10 +33,10 @@ export async function generateV3Bill(genAI_Model, scenarioId) {
     const codingResult = await generateMedicalCoder(genAI_Model, clinicalTruth, scenario);
 
     // PHASE 4: Financial Clerk
-    const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData);
+    const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData, payerType);
 
     // PHASE 5: Publisher
-    let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario);
+    let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType);
 
     // PHASE 6: Polish Agent
     billData = await generatePolishAgent(genAI_Model, billData, scenario);

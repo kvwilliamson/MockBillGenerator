@@ -4,7 +4,7 @@
  * Goal: Format data to match V2 JSON structure exactly.
  * This ensures the frontend renders the "Beautiful Bill" correctly.
  */
-export function generatePublisher(facility, clinical, coding, financial, scenario) {
+export function generatePublisher(facility, clinical, coding, financial, scenario, payerType) {
     const today = new Date().toISOString().split('T')[0];
 
     // Map Phase 4 line items to V2 structure
@@ -17,6 +17,11 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
         unitPrice: item.unit_price,
         total: item.total_charge
     }));
+
+    // Determine Insurance Name
+    let insuranceName = "Blue Cross Blue Shield";
+    if (payerType === 'Self-Pay') insuranceName = "Uninsured / Self-Pay";
+    if (payerType === 'High-Deductible') insuranceName = "Aetna (HDHP)";
 
     // Construct the V2 Data Object (FLATTENED for BillTemplate.jsx)
     const billData = {
@@ -45,7 +50,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
 
             // -- CLINICAL & INSURANCE --
             icd10: coding.icd_codes.map(icd => `${icd.code} - ${icd.description}`).join(', '),
-            insurance: "Blue Cross Blue Shield", // Placeholder - could be added to scenario
+            insurance: insuranceName,
             insuranceStatus: "Active",
             tob: "131", // Type of Bill
 

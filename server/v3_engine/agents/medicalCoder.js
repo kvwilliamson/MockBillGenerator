@@ -23,8 +23,32 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
            - If the text says "IV started", add CPT 36415/96360.
            - If the text says "Zofran given", add HCPCS J2405.
            - **Goal**: The bill must accurately reflect the *complexity* of the generated clinical story.
-        4. Even if the instructions imply fraud (e.g., "Upcode to Level 5"), YOU MUST FOLLOW THEM for the main code. You are simulating the error.
-        5. Provide a short "Coding Rationale" for each code.
+        4. **DESCRIPTION FORMAT**: YOU MUST GENERATE TWO DESCRIPTIONS PER CODE.
+           - **billing_description**: REAL WORLD CHARGEMASTER STYLE. Short, ALL CAPS, cryptic, max 30 chars.
+           - **official_description**: FULL OFFICIAL AMA CPT DESCRIPTION. Must be exact.
+           
+           **EXAMPLES (FOLLOW THESE EXACTLY)**:
+           - 99285:
+             * billing: "HC ED VISIT LVL 5"
+             * official: "Emergency department visit for the evaluation and management of a patient, which requires these 3 key components: A comprehensive history; A comprehensive examination; and Medical decision making of high complexity."
+           - 36415:
+             * billing: "VENIPUNCTURE"
+             * official: "Collection of venous blood by venipuncture"
+           - 85025:
+             * billing: "CBC W/DIFF"
+             * official: "Blood count; complete (CBC), automated (Hgb, Hct, RBC, WBC and platelet count) and automated differential WBC count"
+           - 96360:
+             * billing: "IV INFUSION 1 HR"
+             * official: "Intravenous infusion, hydration; initial, 31 minutes to 1 hour"
+           - J2405:
+             * billing: "ONDANSETRON 1MG"
+             * official: "Injection, ondansetron hydrochloride, per 1 mg"
+           - G0001:
+             * billing: "FLU VACCINE ADMIN"
+             * official: "Administration of influenza virus vaccine for the prophylaxis of influenza disease (this code is to be used for Medicare billing purposes only)"
+
+        5. Even if the instructions imply fraud (e.g., "Upcode to Level 5"), YOU MUST FOLLOW THEM for the main code. You are simulating the error.
+        6. Provide a short "Coding Rationale" for each code.
         
         **RETURN JSON**:
         {
@@ -32,9 +56,14 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
                 { "code": "R07.9", "description": "Chest pain, unspecified" }
             ],
             "cpt_codes": [
-                { "code": "99285", "description": "Emergency dept visit, high severity", "quantity": 1, "modifier": "", "type": "CORE" },
-                { "code": "36415", "description": "Collection of venous blood", "quantity": 1, "modifier": "", "type": "ANCILLARY" },
-                { "code": "80053", "description": "Comprehensive metabolic panel", "quantity": 1, "modifier": "", "type": "ANCILLARY" }
+                { 
+                    "code": "99285", 
+                    "billing_description": "HC ED VISIT LVL 5", 
+                    "official_description": "Emergency department visit for the evaluation and management of a patient...",
+                    "quantity": 1, 
+                    "modifier": "", 
+                    "type": "CORE" 
+                }
             ]
         }
     `;
