@@ -88,6 +88,8 @@ function App() {
     // V3 State
     const [selectedScenarioId, setSelectedScenarioId] = useState(v3Scenarios[0]?.id || '1');
     const [v3PayerType, setV3PayerType] = useState('Self-Pay');
+    const [splitTab, setSplitTab] = useState('FACILITY'); // 'FACILITY' | 'PROFESSIONAL'
+    const [splitDownloadMode, setSplitDownloadMode] = useState('COMBINED'); // 'COMBINED' | 'SEPARATE'
     const [reviewReport, setReviewReport] = useState(null); // Phase 7 Report
     const [agentLogs, setAgentLogs] = useState([]); // Telemetry Logs
 
@@ -125,8 +127,16 @@ function App() {
                 payerType: v3PayerType
             });
 
-            console.log("V3 Response:", response.data);
-
+            console.log("V3 DATA RECEIVED:", response.data); // DEBUG LOG
+            setGeneratedData(response.data);
+            if (response.data.mode === 'SPLIT') {
+                setSplitTab('FACILITY'); // Default to Facility tab
+            } else {
+                setSplitTab('FACILITY'); // Reset for safety
+            }
+            // Assuming setShowConfetti is defined elsewhere or intended to be added.
+            // For now, commenting it out to avoid a reference error if not defined.
+            // setShowConfetti(true); 
             if (response.data.bill_data) {
                 setGeneratedData(response.data);
                 // Also set MR data if available from Clinical Architect
@@ -409,11 +419,88 @@ DO NOT modify logic unless a clear gap is found.
     const handleDownloadPDF = async () => {
         if (!generatedData) return;
 
-        let template;
-        let typePrefix = 'FMBI';
+        // HELPER: Generate and Download a Single PDF
+        const downloadSinglePDF = async (htmlContent, fileName) => {
+            const fullHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { margin: 0; padding: 0; }
+                    /* Ensure print styles are forced */
+                    @media print {
+                        .page-break { page-break-after: always; }
+                    }
+                    .page-break { page-break-after: always; display: block; height: 0; clear: both; }
+                </style>
+            </head>
+            <body>
+                ${htmlContent}
+            </body>
+            </html>
+        `;
 
+            try {
+                const response = await axios.post('http://localhost:4000/render-pdf', {
+                    html: fullHtml,
+                    scanMode
+                }, {
+                    responseType: 'blob' // Important for PDF download
+                });
+
+                // Create blob link to download
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (err) {
+                console.error(err);
+                alert('Failed to generate PDF: ' + fileName);
+            }
+        };
+
+        // LOGIC START
+        let typePrefix = 'FMBI';
+        let fileNameBase = `mock-bill-${errorType.toLowerCase()}`;
+
+        if (generatedData.scenario_meta?.mockBillName) {
+            // V3 Canonical Name Priority: [ID]-[Name].pdf
+            const id = generatedData.scenario_meta.scenarioId || '0';
+            fileNameBase = `${id}-${generatedData.scenario_meta.mockBillName}`;
+        } else if (generatedData.namingParts) {
+            const p = generatedData.namingParts;
+            fileNameBase = `${typePrefix}-${p.sExp}-${p.pExp}-${p.eExp}-${p.cExp}`;
+        }
+
+        // CASE 1: SPLIT BILL MODE
+        if (viewMode === 'BILL' && generatedData.mode === 'SPLIT') {
+            const facilityHtml = renderToStaticMarkup(<BillTemplate data={generatedData.facilityBill.bill_data} />);
+            const proHtml = renderToStaticMarkup(<BillTemplate data={generatedData.professionalBill.bill_data} />);
+
+            if (splitDownloadMode === 'COMBINED') {
+                // COMBINED: Merge with page break
+                const combinedHtml = `
+                    ${facilityHtml}
+                    <div class="page-break"></div>
+                    ${proHtml}
+                `;
+                await downloadSinglePDF(combinedHtml, `${fileNameBase}-cmb.pdf`);
+            } else {
+                // SEPARATE: Two downloads
+                await downloadSinglePDF(facilityHtml, `${fileNameBase}-fac.pdf`);
+                // Small delay to ensure browser handles both
+                setTimeout(() => downloadSinglePDF(proHtml, `${fileNameBase}-pro.pdf`), 500);
+            }
+            return;
+        }
+
+        // CASE 2: STANDARD / OTHER MODES
+        let template;
         if (viewMode === 'BILL') {
-            template = <BillTemplate data={generatedData.bill_data} />;
+            template = <BillTemplate data={generatedData.bill_data || generatedData.facilityBill?.bill_data} />;
             typePrefix = 'FMBI';
         } else if (viewMode === 'GFE') {
             if (!gfeData) return;
@@ -426,64 +513,13 @@ DO NOT modify logic unless a clear gap is found.
         }
 
         let docHtml;
-        if (modifiedHtml) {
-            docHtml = modifiedHtml;
-        } else if (isEditing && previewRef.current) {
-            docHtml = previewRef.current.innerHTML;
+        if (modifiedHtml && viewMode === 'BILL') {
+            docHtml = modifiedHtml; // Use edited HTML if active
         } else {
             docHtml = renderToStaticMarkup(template);
         }
-        const fullHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { margin: 0; padding: 0; }
-                /* Ensure print styles are forced */
-                @media print {
-                    .page-break { page-break-after: always; }
-                }
-            </style>
-        </head>
-        <body>
-            ${docHtml}
-        </body>
-        </html>
-    `;
 
-        try {
-            const response = await axios.post('http://localhost:4000/render-pdf', {
-                html: fullHtml,
-                scanMode
-            }, {
-                responseType: 'blob' // Important for PDF download
-            });
-
-            // Create blob link to download
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-
-            const parts = generatedData.namingParts;
-            let fileName = `mock-bill-${errorType.toLowerCase()}.pdf`;
-
-            if (generatedData.scenario_meta?.mockBillName) {
-                // V3 Canonical Name Priority
-                fileName = generatedData.scenario_meta.mockBillName + '.pdf';
-            } else if (parts) {
-                fileName = `${typePrefix}-${parts.sExp}-${parts.pExp}-${parts.eExp}-${parts.cExp}.pdf`;
-            } else if (generatedData.billName) {
-                // Compatibility fallback
-                fileName = generatedData.billName.replace('FMBI', typePrefix) + '.pdf';
-            }
-
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-        } catch (err) {
-            console.error(err);
-            alert('Failed to generate PDF');
-        }
+        await downloadSinglePDF(docHtml, `${fileNameBase}.pdf`);
     };
 
     const handleDownloadAnalysis = () => {
@@ -812,6 +848,24 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                         </label>
                     </div>
 
+                    {/* SPLIT DOWNLOAD OPTIONS */}
+                    {generatedData?.mode === 'SPLIT' && (
+                        <div className="mb-4 flex justify-center bg-slate-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => setSplitDownloadMode('COMBINED')}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${splitDownloadMode === 'COMBINED' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                🔗 Combined
+                            </button>
+                            <button
+                                onClick={() => setSplitDownloadMode('SEPARATE')}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${splitDownloadMode === 'SEPARATE' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                📄 Separate
+                            </button>
+                        </div>
+                    )}
+
                     <button
                         onClick={handleDownloadPDF}
                         disabled={!generatedData || loading}
@@ -1000,14 +1054,14 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                     )}
                 </div>
 
-                {/* V2 DEBUG INSPECTOR */}
-                {generatedData && (generatedData.ground_truth || generatedData.simulation_debug) && (
-                    <div className="mt-8 border-t border-slate-300 pt-6">
+                {/* V3 BILL RENDERER */}
+                {activeGenerator === 'V3' && generatedData && (generatedData.bill_data || generatedData.facilityBill || generatedData.mode === 'SPLIT') && (
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         <div className="bg-slate-900 rounded-lg overflow-hidden shadow-lg">
                             {/* Header */}
                             <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
                                 <h3 className="text-white font-bold flex items-center gap-2">
-                                    <span className="text-emerald-400">⚡ V2 Simulation Inspector</span>
+                                    <span className="text-emerald-400">⚡ V3 Bill Renderer</span>
                                 </h3>
                                 {generatedData.ground_truth?.type && (
                                     <span className="text-xs bg-red-900 text-red-200 px-2 py-1 rounded border border-red-700">
@@ -1198,7 +1252,35 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                             <div dangerouslySetInnerHTML={{ __html: modifiedHtml }} />
                         ) : (
                             <>
-                                {viewMode === 'BILL' && <BillTemplate data={generatedData.bill_data} />}
+                                {viewMode === 'BILL' && (
+                                    <div className="flex flex-col">
+                                        {/* SPLIT BILL TOGGLE */}
+                                        {generatedData.mode === 'SPLIT' && (
+                                            <div className="flex justify-center gap-4 mb-6 border-b pb-4">
+                                                <button
+                                                    onClick={() => setSplitTab('FACILITY')}
+                                                    className={`px-6 py-2 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'FACILITY' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
+                                                >
+                                                    🏥 Facility Statement
+                                                </button>
+                                                <button
+                                                    onClick={() => setSplitTab('PROFESSIONAL')}
+                                                    className={`px-6 py-2 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'PROFESSIONAL' ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
+                                                >
+                                                    🩺 Professional Statement
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <BillTemplate
+                                            data={
+                                                generatedData.mode === 'SPLIT'
+                                                    ? (splitTab === 'PROFESSIONAL' ? generatedData.professionalBill.bill_data : generatedData.facilityBill.bill_data)
+                                                    : (generatedData.bill_data || generatedData.facilityBill?.bill_data)
+                                            }
+                                        />
+                                    </div>
+                                )}
                                 {viewMode === 'GFE' && <GFETemplate data={gfeData} />}
                                 {viewMode === 'MR' && <MedicalRecordTemplate data={mrData} />}
                             </>

@@ -5,17 +5,31 @@ import { parseAndValidateJSON } from '../utils.js';
  * Goal: Truth Validity Analysis (Popup Report)
  */
 export async function generateReviewer(model, finalBillData, clinicalTruth, codingTruth, scenario) {
+    // ADAPTIVE REVIEW: Handle Split vs Global
+    const billData = finalBillData; // Rename for clarity based on new logic
+    const dataToReview = billData.mode === 'SPLIT' ? billData.facilityBill.bill_data : (billData.bill_data || billData);
+
+    // Validate inputs (Quick Check)
+    if (!dataToReview || !dataToReview.provider) {
+        console.warn("[V3 Reviewer] Invalid bill data structure. Skipping review.");
+        return {
+            detectableFromBill: false,
+            explanation: "Invalid bill data structure provided for review.",
+            missingInfo: "N/A"
+        };
+    }
+
     const prompt = `
-        You are "The Reviewer". Your job is to audit a generated mock bill against the "Truth" of the clinical encounter to explain the error loop.
+        You are "The Internal Auditor". Your job is to double-check the bill before it goes out.
         
         **SCENARIO**: "${scenario.scenarioName}"
         **INTENDED ERROR**: "${scenario.description}"
         **NARRATIVE TRUTH**: "${scenario.narrative}"
         
-        **BILL CONTENT**:
-        - Facility: ${finalBillData.bill_data.provider.name}
-        - Total: $${finalBillData.bill_data.grandTotal}
-        - CPT Codes: ${JSON.stringify(finalBillData.bill_data.lineItems.map(s => s.code + ": " + s.desc))}
+        **BILL TO REVIEW**:
+        - Facility: ${dataToReview.provider.name}
+        - Total: $${dataToReview.grandTotal}
+        - CPT Codes: ${JSON.stringify(dataToReview.lineItems.map(s => s.code + ": " + s.desc))}
         
         **CLINICAL RECORD**:
         ${JSON.stringify(clinicalTruth.encounter)}

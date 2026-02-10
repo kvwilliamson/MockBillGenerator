@@ -77,15 +77,43 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
             "icd_codes": [
                 { "code": "R07.9", "description": "Chest pain, unspecified" }
             ],
-            "cpt_codes": [
-                { 
-                    "code": "99285", 
-                    "billing_description": "HC ED VISIT LVL 5", 
-                    "official_description": "Emergency department visit for the evaluation and management of a patient...",
-                    "quantity": 1, 
-                    "modifier": "", 
-                    "type": "CORE" 
-                }
+            // IF GLOBAL (Clinic):
+            "cpt_codes": [...], 
+            
+        **SPLIT BILLING LOGIC (CRITICAL)**:
+        You must decide which bill each code belongs to.
+        
+        1.  **FACILITY BILL (UB-04) ONLY**:
+            -   **Laboratory (8xxxx)**: ALL routine labs (CBC, BMP, Troponin) are Facility ONLY (Technical component). Do NOT put these on the Pro bill.
+            -   **Nursing/Admin (3xxxx, 9xxxx)**: Venipuncture (36415), IV Infusion (96360), Vaccines (G0001). Facility ONLY.
+            -   **Facility E/M**: The Room Fee (e.g. 99285).
+            -   **Radiology Tech**: The machine use (e.g. 71045).
+            
+        2.  **PROFESSIONAL BILL (CMS-1500) ONLY**:
+            -   **Professional E/M**: The Doctor's time (e.g. 99285).
+            -   **Interpretations (-26)**: Radiology interpretations (e.g. 71045-26).
+            -   **Surgical Procedures**: Doctor's fee for procedures (e.g. 12001 Repair).
+            
+        **EXAMPLE SPLIT**:
+        - CBC (85025) -> Facility Bill [YES], Pro Bill [NO].
+        - X-Ray (71045) -> Facility Bill [YES (Tech)], Pro Bill [YES (Interp -26)].
+        - ER Visit -> Facility Bill [99285], Pro Bill [99285].
+        
+        **RETURN JSON**:
+        {
+            "icd_codes": [ ... ],
+            
+            // IF SPLIT (Hospital/ER):
+            "facility_codes": [
+                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "type": "FACILITY_EM" },
+                 { "code": "85025", "billing_description": "CBC W/DIFF", "type": "LAB" },
+                 { "code": "36415", "billing_description": "VENIPUNCTURE", "type": "NURSING" },
+                 { "code": "71045", "billing_description": "XR CHEST 2 VIEW", "type": "TECH_XRAY" }
+            ],
+            "professional_codes": [
+                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "type": "PRO_EM" },
+                 { "code": "71045-26", "billing_description": "XR CHEST INTERP", "type": "PRO_READ" }
+                 // NOTE: NO LABS HERE
             ]
         }
     `;
@@ -95,7 +123,8 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
     const text = result.response.text();
     const aiData = parseAndValidateJSON(text);
 
-    console.log(`[V3 Phase 3] Medical Coder: Assigned ${aiData.cpt_codes.length} services.`);
+    const count = aiData.cpt_codes ? aiData.cpt_codes.length : (aiData.facility_codes?.length || 0);
+    console.log(`[V3 Phase 3] Medical Coder: Assigned ${count} services. Mode: ${aiData.facility_codes ? 'SPLIT' : 'GLOBAL'}`);
     return aiData;
   } catch (error) {
     console.error("Medical Coder Failed:", error);

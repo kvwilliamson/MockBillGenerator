@@ -27,7 +27,10 @@ export async function generateFacilityIdentity(model, specialty, randomSeed) {
             "state": "Real ST",
             "zip": "XXXXX",
             "facilityType": "Corporate Hospital / Private Practice / ASC",
-            "regional_index": "urban / rural"
+            "state": "Real ST",
+            "zip": "XXXXX",
+            "facilityType": "Corporate Hospital / Private Practice / ASC",
+            "billingModel": "Split / Global" // Hospital = Split. Private Practice = Global.
         }
     `;
 

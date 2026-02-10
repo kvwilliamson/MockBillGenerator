@@ -47,9 +47,9 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
     console.log("=== V3 ENGINE COMPLETE ===");
 
     return {
-        bill_data: billData.bill_data,
+        ...billData, // Spread: mode, facilityBill, professionalBill, (or bill_data if legacy)
         review_report: reviewReport,
-        clinical_truth: clinicalTruth, // Optional: return for frontend display if needed
+        clinical_truth: clinicalTruth,
         scenario_meta: scenario
     };
 }
