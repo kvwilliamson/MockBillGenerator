@@ -19,18 +19,44 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         
         **TASK**:
         1. Assign a "Unit Price" for each CPT code.
-        2. **CORE ITEMS**: IF the instructions say "Inflate", use a very high price (e.g., 500% of Medicare). IF "Standard", use 300% of Medicare.
-        3. **ANCILLARY ITEMS**: Price these normally (fair market value + markup). Do not apply the "Inflate" instruction to these unless specifically told to.
-           - Labs: $50 - $200
-           - Venipuncture: $25 - $45
-           - Supplies: $15 - $100
+        2. **CHARGEMASTER PRICING (PAYER-AWARE)**: 
+           - **STEP 1**: Estimate the 'National Average' (Medicare Allowable) for the specific CPT code.
+           - **STEP 2**: Determine the **PRICE MULTIPLIER** based on Payer Type:
+             * **Self-Pay (Uncontracted)**: Use **3.0x to 5.0x** (Chargemaster Rate). This shows the full "Sticker Price".
+             * **Commercial / High-Deductible (Contracted)**: Use **1.5x to 2.0x** (Negotiated Rate). This reflects the discount insurance companies get.
+           - **STEP 3**: Apply Multiplier to set the 'Billed Charge'.
+           - **Result**: Self-Pay bills look "Predatroy" ($385 for $100 service), Insured bills look "High but Managed" ($180 for $100 service).
+           
+        3. **ANCILLARY ITEMS**: Use the same Multiplier Logic (3-5x for Self-Pay, 1.5x for Insured).
+           - Labs: Medicare Avg $15 -> Bill $65.00
+           - Venipuncture: Medicare Avg $20 -> Bill $85.00
+           - Supplies: Mark up 5x cost.
+        
         4. Calculate "Total Charge" (Unit Price * Quantity).
-        5. Assign a "Revenue Code" (3-digit or 4-digit) appropriate for the facility type AND the line item type (e.g., 450 for ER, 300 for Labs, 250 for Pharmacy).
-        6. **DESCRIPTION MAPPING**: 
-           - **CRITICAL**: The input "CPT Codes" has two description fields. You must map them as follows:
+        
+        5. **REVENUE CODES (SETTING-AWARE)**:
+           - Enforce strict pairings based on **Care Setting** and **CPT Category**:
+             * **ER Items**: Use 0450 (ER Gen) or 045x.
+             * **Clinic Items**: Use 0510 (Clinic Gen).
+             * **Urgent Care**: Use 0456.
+             * **Inpatient**: Use 011x (Room) / 012x.
+             * **Pharmacy**: 0250 (Gen) or 0636 (Detailed).
+             * **Labs**: 0300 (Gen) or 030x.
+             * **Supplies**: 0270 (Med/Surg).
+           - Ensure the 4-digit code matches the Care Setting perfectly.
+
+        6. **PAYER LOGIC (IMPORTANT)**: 
+           - **IF Payer is 'Self-Pay'**: 
+             * Adjustment = $0.00. 
+             * Patient Responsibility = Total Charge. 
+             * (Realism: Self-pay patients rarely get discounts automatically).
+           - **IF Payer is 'Commercial' or 'High-Deductible'**: 
+             * Adjustment = 30-50% of Total Charge (Contractual Write-off).
+             * Patient Responsibility = Remainder (Co-pay/Deductible).
+             
+        7. **DESCRIPTION MAPPING**: 
            - Output Field \`description\`: Set this to the Input Field \`billing_description\` (Short/Cryptic).
            - Output Field \`official_description\`: Set this to the Input Field \`official_description\` (Long/Official).
-           - **DO NOT** use the long description for the main \`description\` field. The bill must look like a cryptic Chargemaster.
 
         **RETURN JSON**:
         {
@@ -38,15 +64,19 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
                 {
                     "cpt": "99285",
                     "description": "HC ED VISIT LVL 5", 
-                    "official_description": "Emergency department visit for the evaluation and management of a patient...", 
+                    "official_description": "Emergency department visit...", 
                     "rev_code": "0450",
                     "quantity": 1,
                     "unit_price": 1200.00,
                     "total_charge": 1200.00,
+                    "adjustment": 0.00,
+                    "patient_responsibility": 1200.00,
                     "date_of_service": "2024-10-15"
                 }
             ],
-            "total_billed": 1200.00
+            "total_billed": 1200.00,
+            "total_adjustment": 0.00,
+            "total_patient_responsibility": 1200.00
         }
     `;
 
@@ -57,11 +87,22 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
 
         // Deterministic Recalculation (Sanity Check)
         let runningTotal = 0;
+        let runningAdj = 0;
+        let runningResp = 0;
+
         aiData.line_items.forEach(item => {
             item.total_charge = item.unit_price * item.quantity;
+            // Sanity check patient responsibility
+            if (item.patient_responsibility === undefined) {
+                item.patient_responsibility = item.total_charge - (item.adjustment || 0);
+            }
             runningTotal += item.total_charge;
+            runningAdj += (item.adjustment || 0);
+            runningResp += item.patient_responsibility;
         });
         aiData.total_billed = runningTotal;
+        aiData.total_adjustment = runningAdj;
+        aiData.total_patient_responsibility = runningResp;
 
         console.log(`[V3 Phase 4] Financial Clerk: Total Bill $${aiData.total_billed}`);
         return aiData;

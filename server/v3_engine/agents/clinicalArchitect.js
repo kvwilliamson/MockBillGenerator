@@ -17,11 +17,16 @@ export async function generateClinicalArchitect(model, scenario, facility) {
         **INSTRUCTIONS**:
         1. Generate a realistic "Patient Name" and "DOB".
         2. Create a **RICH, DETAILED Medical Record** that ALIGNS with the Narrative Rule.
-        3. **COMPLEXITY DRIVER**: The narrative must include specific, billable clinical events to make the final bill look realistic.
-           - Mention specific medications administered (e.g., "Zofran 4mg IV", "Morphine 2mg").
-           - Mention specific labs ordered (e.g., "CBC, CMP, Troponin").
-           - Mention specific imaging (e.g., "CXR", "CT Head").
-           - Mention specific supplies (e.g., "IV Start Kit", "Laceration Tray").
+        3. **COMPLEXITY DRIVER (THE PATHWAY)**: 
+           - **ACUTE FINDINGS**: If the Narrative Rule implies a minor condition, you MUST generate **LOW ACUITY** acute findings (Stable Vitals, Happy/Comfortable). 
+             * Do NOT generate high-acuity interventions just to match a high billing code. 
+             * The "Upcoding" error relies on the mismatch between the *Boring Record* and the *Expensive Code*.
+           
+           - **HISTORICAL COMPLEXITY (RED HERRINGS)**:
+             * To make High-Level coding look plausible (even if incorrect), ALWAYS include 1-2 "Risk Factors" or "History" items in the HPI/Past Medical History.
+             * **CRITICAL**: These are *historical* factors, not acute problems. The patient should be currently stable.
+
+        4. If the narrative implies valid care, document it fully.
         4. If the narrative implies valid care, document it fully.
         5. If the narrative implies a gap (e.g., "Short visit billed as high level"), document the *actual* short visit but perhaps include the "padding" items that often accompany such visits to mask the fraud.
         6. Generate the "Chief Complaint" and "Diagnosis" (ICD-10 style description).
@@ -34,7 +39,7 @@ export async function generateClinicalArchitect(model, scenario, facility) {
                 "gender": "M/F"
             },
             "encounter": {
-                "date_of_service": "2024-10-15",
+                "date_of_service": "${new Date().toISOString().split('T')[0]}",
                 "chief_complaint": "...",
                 "hpi": "History of Present Illness...",
                 "exam_notes": "Physical exam findings...",

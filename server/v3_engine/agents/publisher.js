@@ -5,23 +5,68 @@
  * This ensures the frontend renders the "Beautiful Bill" correctly.
  */
 export function generatePublisher(facility, clinical, coding, financial, scenario, payerType) {
-    const today = new Date().toISOString().split('T')[0];
+    // Generate Randomized Statement Date (15-45 days after service)
+    const dosDate = new Date(clinical.encounter.date_of_service);
+    const lagDays = Math.floor(Math.random() * 30) + 15;
+    const stmtDate = new Date(dosDate);
+    stmtDate.setDate(dosDate.getDate() + lagDays);
+    const statementDateStr = stmtDate.toISOString().split('T')[0];
 
-    // Map Phase 4 line items to V2 structure
-    const lineItems = financial.line_items.map(item => ({
-        date: item.date_of_service || clinical.encounter.date_of_service,
-        code: item.cpt,
-        description: item.description,
-        revCode: item.rev_code,
-        qty: item.quantity,
-        unitPrice: item.unit_price,
-        total: item.total_charge
-    }));
+    // Add Timestamps to Service Dates (Technical Noise)
+    // Sort Line Items logically (Labs -> E/M -> Meds/Procedures)
+    const sortedItems = [...financial.line_items].sort((a, b) => {
+        const getScore = (cpt) => {
+            if (cpt.startsWith('8')) return 1; // Labs first
+            if (cpt.startsWith('7')) return 2; // Imaging
+            if (cpt.startsWith('99')) return 3; // E/M (Doctor sees patient)
+            if (cpt.startsWith('9') || cpt.startsWith('J')) return 4; // Procedures/Meds
+            return 5;
+        };
+        return getScore(a.cpt) - getScore(b.cpt);
+    });
 
-    // Determine Insurance Name
-    let insuranceName = "Blue Cross Blue Shield";
-    if (payerType === 'Self-Pay') insuranceName = "Uninsured / Self-Pay";
-    if (payerType === 'High-Deductible') insuranceName = "Aetna (HDHP)";
+    // Add Chronological Timestamps
+    let currentHour = Math.floor(Math.random() * 4) + 8; // Start between 08:00 and 12:00
+    let currentMinute = Math.floor(Math.random() * 60);
+
+    const lineItems = sortedItems.map(item => {
+        // Increment time by 15-45 minutes per step
+        currentMinute += Math.floor(Math.random() * 30) + 15;
+        if (currentMinute >= 60) {
+            currentHour += Math.floor(currentMinute / 60);
+            currentMinute = currentMinute % 60;
+        }
+
+        // Format Date as MM/DD/YYYY HH:mm
+        const mm = (dosDate.getMonth() + 1).toString().padStart(2, '0');
+        const dd = dosDate.getDate().toString().padStart(2, '0');
+        const yyyy = dosDate.getFullYear();
+        const hh = currentHour.toString().padStart(2, '0');
+        const min = currentMinute.toString().padStart(2, '0');
+
+        const timeStr = `${mm}/${dd}/${yyyy} ${hh}:${min}`;
+
+        return {
+            date: timeStr,
+            code: item.cpt,
+            description: item.description,
+            revCode: item.rev_code,
+            qty: item.quantity,
+            unitPrice: item.unit_price,
+            total: item.total_charge
+        };
+    });
+
+    // Determine Insurance Name and FA Status
+    const payers = ["Blue Cross Blue Shield", "UnitedHealthcare", "Aetna", "Cigna", "Humana"];
+    let insuranceName = payers[Math.floor(Math.random() * payers.length)];
+    let faStatus = "";
+
+    if (payerType === 'Self-Pay') {
+        insuranceName = "Uninsured / Self-Pay";
+        faStatus = "**Status**: Financial Assistance Application Pending. Please verify income documents.";
+    }
+    if (payerType === 'High-Deductible') insuranceName = `${insuranceName} (HDHP)`;
 
     // Construct the V2 Data Object (FLATTENED for BillTemplate.jsx)
     const billData = {
@@ -44,7 +89,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
             // -- DATES --
             admissionDate: clinical.encounter.date_of_service,
             dischargeDate: clinical.encounter.date_of_service, // Single day default
-            statementDate: today,
+            statementDate: statementDateStr,
             statementId: "ST-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
             dueDate: "Upon Receipt",
 
@@ -54,12 +99,15 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
             insuranceStatus: "Active",
             tob: "131", // Type of Bill
 
+            // -- NOTES (New for Realism) --
+            notes: faStatus,
+
             // -- FINANCIALS --
             lineItems: lineItems,
             subtotal: financial.total_billed,
-            adjustments: 0.00, // Initial bill usually has 0 or estimated adjustments
+            adjustments: financial.total_adjustment || 0.00,
             insPaid: 0.00,
-            grandTotal: financial.total_billed, // Balance Due
+            grandTotal: financial.total_patient_responsibility || financial.total_billed, // Balance Due
 
             // -- LABELS (Defaults) --
             labels: {

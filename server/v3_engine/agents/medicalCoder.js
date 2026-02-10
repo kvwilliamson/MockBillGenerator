@@ -5,7 +5,7 @@ import { parseAndValidateJSON } from '../utils.js';
  * Goal: Apply Codes based on Instructions (Hybrid AI/Constraint)
  */
 export async function generateMedicalCoder(model, clinicalTruth, scenario) {
-    const prompt = `
+  const prompt = `
         You are "The Medical Coder". Your goal is to assign CPT and ICD codes for a bill.
         
         **INPUTS**:
@@ -17,11 +17,26 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
         
         **TASK**:
         1. Assign ICD-10 Diagnosis Codes based on the clinical record.
+           - **DIAGNOSIS REALISM**: For High-Level E/M, use **High-Acuity Diagnoses** relevant to the **Care Setting**. (e.g. Clinic: 'Uncontrolled Chronic Condition'; ER: 'Acute Onset Pain'; Inpatient: 'Systemic Infection').
+        
         2. **CORE PROCEDURE**: Assign CPT Procedure Codes based on the **STRICT CODING INSTRUCTIONS**.
-        3. **DERIVED SERVICES**: Review the *entire* Clinical Record (HPI, Exam, Plan) and assign CPT/HCPCS codes for EVERY documented service.
-           - If the text says "CBC ordered", add CPT 85025.
-           - If the text says "IV started", add CPT 36415/96360.
-           - If the text says "Zofran given", add HCPCS J2405.
+           - **BUNDLING RULE (CRITICAL)**: Unless the instructions explicitly say to "Unbundle" or "Explode" a code for the scenario, you must **BUNDLE** standard services according to NCCI edits.
+           - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the setting (e.g. 9928x for ER, 9920x/9921x for Clinic, 9922x for Inpatient). NEVER bill multiple E/M codes.
+           
+        3. **DERIVED SERVICES (AND DENSITY)**: Review the *entire* Clinical Record and assign CPT/HCPCS codes.
+           - **SETTING-AGNOSTIC DENSITY LOGIC**:
+             * **Rule A (Clean Bill)**: If the bill is "Clean" (High Level), it MUST act "Busy". Generate appropriate ancillary services for *that specific setting* (e.g. Clinic = PoC Labs/Immunizations; ER = CT/IV/Labs; Inpatient = Daily Labs).
+             * **Rule B (Upcoding/Inflation)**: If the scenario is "Upcoding", you MUST create a **DENSITY MISMATCH**. The E/M Code is High, BUT the ancillary services must match a **Low Complexity** visit for that setting.
+           
+           - **ANCILLARY RESTRAINT**: Only bill for ancillaries explicitly found in the Clinical Record.
+           
+           - **CHARGEMASTER NOISE (BLOAT)**: 
+             * For High-Level visits, add 1-2 "Administrative" line items (e.g. Supplies, Monitoring) to look "Real".
+           
+           - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code. 
+             * **CRITICAL UNIT LOGIC**: Look up the "billing unit" for the J-Code. Calculate the quantity based on the dose given.
+           
+           - **FORMATTING RULE**: CPT Codes must be 5-character STRINGS. **NO DECIMALS**. ICD-10 codes DO have decimals.
            - **Goal**: The bill must accurately reflect the *complexity* of the generated clinical story.
         4. **DESCRIPTION FORMAT**: YOU MUST GENERATE TWO DESCRIPTIONS PER CODE.
            - **billing_description**: REAL WORLD CHARGEMASTER STYLE. Short, ALL CAPS, cryptic, max 30 chars.
@@ -68,18 +83,18 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
         }
     `;
 
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        const aiData = parseAndValidateJSON(text);
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const aiData = parseAndValidateJSON(text);
 
-        console.log(`[V3 Phase 3] Medical Coder: Assigned ${aiData.cpt_codes.length} services.`);
-        return aiData;
-    } catch (error) {
-        console.error("Medical Coder Failed:", error);
-        return {
-            icd_codes: [{ code: "R69", description: "Illness, unspecified" }],
-            cpt_codes: [{ code: "99213", description: "Office visit", quantity: 1 }]
-        };
-    }
+    console.log(`[V3 Phase 3] Medical Coder: Assigned ${aiData.cpt_codes.length} services.`);
+    return aiData;
+  } catch (error) {
+    console.error("Medical Coder Failed:", error);
+    return {
+      icd_codes: [{ code: "R69", description: "Illness, unspecified" }],
+      cpt_codes: [{ code: "99213", description: "Office visit", quantity: 1 }]
+    };
+  }
 }
