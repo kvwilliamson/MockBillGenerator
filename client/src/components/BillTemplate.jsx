@@ -95,6 +95,7 @@ export const BillTemplate = ({ data }) => {
             lineHeight: theme.lineHeight // Dynamic line height
         }}>
             {/* Header - Dynamic Layout */}
+            {/* HEADER NPI/TAX ID REMOVED (Moved to Footer) */}
             {theme.headerStyle === 'centered' ? (
                 <div style={{ textAlign: 'center', borderBottom: `4px double ${theme.primaryColor}`, paddingBottom: '20px', marginBottom: '20px' }}>
                     <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '28px', textTransform: 'uppercase' }}>
@@ -102,7 +103,6 @@ export const BillTemplate = ({ data }) => {
                     </h1>
                     <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
                     {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>{data.labels?.contact || 'Contact'}: {provider.contact}</p>}
-                    <p style={{ margin: '5px 0' }}>{data.labels?.npi || 'NPI'}: {npi} | {data.labels?.taxId || 'Tax ID'}: {taxId}</p>
                     <h2 style={{ marginTop: '15px', fontSize: '18px', background: '#eee', display: 'inline-block', padding: '5px 20px' }}>PATIENT STATEMENT</h2>
                 </div>
             ) : (
@@ -111,7 +111,6 @@ export const BillTemplate = ({ data }) => {
                         <h1 style={{ margin: 0, color: theme.primaryColor, fontSize: '24px' }}>
                             {typeof provider === 'object' ? provider.name : provider}
                         </h1>
-                        <p style={{ margin: '5px 0' }}>{data.labels?.npi || 'NPI'}: {npi} | {data.labels?.taxId || 'Tax ID'}: {taxId}</p>
                         <p style={{ margin: '5px 0' }}>{typeof provider === 'object' ? provider.address : (data.address || '123 Medical Center Drive, Healthcare City, ST 12345')}</p>
                         {typeof provider === 'object' && provider.contact && <p style={{ margin: '2px 0', fontSize: '10px' }}>{data.labels?.contact || 'Customer Service'}: {provider.contact}</p>}
                     </div>
@@ -147,7 +146,11 @@ export const BillTemplate = ({ data }) => {
                             <strong>{data.labels?.attending || 'Attending'}:</strong> {data.attendingPhysician} ({data.labels?.npi || 'NPI'}: {data.attendingNpi})
                         </div>
                     )}
-                    <div style={{ maxWidth: '400px', marginTop: '5px' }}><strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />{icd10}</div>
+                    <div style={{ maxWidth: '400px', marginTop: '5px' }}>
+                        <strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />
+                        {/* UI Polish: Show only the description (Hide R07.9) */}
+                        {icd10 ? icd10.split(', ').map(d => d.includes('-') ? d.split('-')[1].trim() : d).join(', ') : ''}
+                    </div>
                     <div><strong>{data.payerLabel || 'INSURANCE'}:</strong> {insurance} {data.insuranceStatus && <span style={{ fontSize: '10px', fontStyle: 'italic' }}>({data.insuranceStatus})</span>}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -162,7 +165,7 @@ export const BillTemplate = ({ data }) => {
                 <thead>
                     <tr style={{ background: theme.secondaryColor, borderBottom: `2px solid ${theme.primaryColor}` }}>
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor, borderRadius: `${theme.borderRadius} 0 0 ${theme.borderRadius}`, whiteSpace: 'nowrap' }}>{data.labels?.gridDate || 'Date'}</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.revCode || 'Rev Code'}</th>
+                        {/* Rev Code Column REMOVED */}
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridCode || 'Code / Mod'}</th>
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridDesc || 'Description'}</th>
                         <th style={{ padding: '8px', textAlign: 'right', color: theme.primaryColor }}>{data.labels?.qty || 'Qty'}</th>
@@ -174,9 +177,16 @@ export const BillTemplate = ({ data }) => {
                     {lineItems.map((item, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
                             <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>{item.date}</td>
-                            <td style={{ padding: '8px' }}>{item.revCode || '-'}</td>
+                            {/* Rev Code Value REMOVED */}
                             <td style={{ padding: '8px' }}>{item.code} {item.modifier ? `-${item.modifier}` : ''}</td>
-                            <td style={{ padding: '8px' }}>{item.description}</td>
+                            <td style={{ padding: '8px' }}>
+                                {item.description}
+                                {item.revCode && (
+                                    <div style={{ fontSize: '10px', color: '#888', fontStyle: 'italic' }}>
+                                        Rev: {item.revCode}
+                                    </div>
+                                )}
+                            </td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>{item.qty}</td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>{formatCurrency(item.total)}</td>
@@ -297,6 +307,9 @@ export const BillTemplate = ({ data }) => {
                         <br />Inpatient stay billed under applicable MS-DRG.
                     </>
                 )}
+                <div style={{ marginTop: '10px', fontSize: '10px', color: '#aaa', textAlign: 'center' }}>
+                    Medical Provider: {typeof provider === 'object' ? provider.name : provider} | NPI: {npi} | Tax ID: {taxId}
+                </div>
             </div>
         </div>
     );

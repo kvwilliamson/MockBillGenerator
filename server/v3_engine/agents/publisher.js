@@ -51,10 +51,12 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
         const hh = currentHour.toString().padStart(2, '0');
         const min = currentMinute.toString().padStart(2, '0');
 
-        const timeStr = `${mm}/${dd}/${yyyy} ${hh}:${min}`;
+        const dateStr = `${mm}/${dd}/${yyyy}`;
+        const fullTimeStr = `${mm}/${dd}/${yyyy} ${hh}:${min}`;
 
         return {
-            date: timeStr,
+            date: dateStr, // Display only date (User Request)
+            timestamp: fullTimeStr, // Keep full chronology in background
             code: item.cpt,
             description: item.description,
             revCode: item.rev_code,

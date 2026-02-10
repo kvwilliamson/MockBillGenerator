@@ -38,16 +38,17 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         
         4. Calculate "Total Charge" (Unit Price * Quantity).
         
-        5. **REVENUE CODES (SETTING-AWARE)**:
-           - Enforce strict pairings based on **Care Setting** and **CPT Category**:
-             * **ER Items**: Use 0450 (ER Gen) or 045x.
-             * **Clinic Items**: Use 0510 (Clinic Gen).
-             * **Urgent Care**: Use 0456.
-             * **Inpatient**: Use 011x (Room) / 012x.
-             * **Pharmacy**: 0250 (Gen) or 0636 (Detailed).
-             * **Labs**: 0300 (Gen) or 030x.
-             * **Supplies**: 0270 (Med/Surg).
-           - Ensure the 4-digit code matches the Care Setting perfectly.
+        5. **REVENUE CODES (SERVICE-SPECIFIC)**:
+           - You MUST map the Revenue Code to the **TYPE OF SERVICE**, not just the room.
+             * **Laboratory (8xxxx)**: ALWAYS use **0300** (General) or **0301**. NEVER use 0450 for labs.
+             * **Radiology (7xxxx)**: ALWAYS use **0320** (X-Ray), **0350** (CT), or **0610** (MRI).
+             * **Pharmacy/Meds (Jxxxx)**: ALWAYS use **0250** (Gen Pharm) or **0636** (Drugs requiring detailed coding).
+             * **IV Infusion (963xx)**: ALWAYS use **0260** (IV Therapy).
+             * **E/M Codes (99xxx)**: THESE are the only codes mapped to the Setting:
+               - ER Visit: **0450**
+               - Clinic Visit: **0510**
+               - Urgent Care: **0456**
+           - **CRITICAL**: Do NOT map a Chest X-Ray to "ER Room" (0450). It is "Radiology" (0320).
 
         6. **PAYER LOGIC (IMPORTANT)**: 
            - **IF Payer is 'Self-Pay'**: 

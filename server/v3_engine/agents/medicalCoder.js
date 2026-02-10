@@ -20,6 +20,11 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
            - **DIAGNOSIS REALISM**: For High-Level E/M, use **High-Acuity Diagnoses** relevant to the **Care Setting**. (e.g. Clinic: 'Uncontrolled Chronic Condition'; ER: 'Acute Onset Pain'; Inpatient: 'Systemic Infection').
         
         2. **CORE PROCEDURE**: Assign CPT Procedure Codes based on the **STRICT CODING INSTRUCTIONS**.
+           - **SPLIT BILLING RULE (CRITICAL)**: You are generating a **FACILITY BILL (UB-04)**.
+             * **NO PROFESSIONAL FEES**: Do NOT include Doctor/Physician fees (Modifier -26). The doctor bills separately.
+             * **FACILITY E/M ONLY**: The E/M Code (e.g. 99285) represents the **Facility Resource Use** (Room, Nursing), NOT the doctor's time.
+             * **NO TRIPLE BILLING**: Never list Global + Pro + Tech. List **ONLY** the Facility/Tech component.
+           
            - **BUNDLING RULE (CRITICAL)**: Unless the instructions explicitly say to "Unbundle" or "Explode" a code for the scenario, you must **BUNDLE** standard services according to NCCI edits.
            - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the setting (e.g. 9928x for ER, 9920x/9921x for Clinic, 9922x for Inpatient). NEVER bill multiple E/M codes.
            
