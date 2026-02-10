@@ -163,7 +163,7 @@ export const BillTemplate = ({ data }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                     <tr style={{ background: theme.secondaryColor, borderBottom: `2px solid ${theme.primaryColor}` }}>
-                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor, borderRadius: `${theme.borderRadius} 0 0 ${theme.borderRadius}` }}>{data.labels?.gridDate || 'Date'}</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor, borderRadius: `${theme.borderRadius} 0 0 ${theme.borderRadius}`, whiteSpace: 'nowrap' }}>{data.labels?.gridDate || 'Date'}</th>
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.revCode || 'Rev Code'}</th>
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridCode || 'Code / Mod'}</th>
                         <th style={{ padding: '8px', textAlign: 'left', color: theme.primaryColor }}>{data.labels?.gridDesc || 'Description'}</th>
@@ -175,7 +175,7 @@ export const BillTemplate = ({ data }) => {
                 <tbody>
                     {lineItems.map((item, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '8px' }}>{item.date}</td>
+                            <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>{item.date}</td>
                             <td style={{ padding: '8px' }}>{item.revCode || '-'}</td>
                             <td style={{ padding: '8px' }}>{item.code} {item.modifier ? `-${item.modifier}` : ''}</td>
                             <td style={{ padding: '8px' }}>{item.description}</td>
