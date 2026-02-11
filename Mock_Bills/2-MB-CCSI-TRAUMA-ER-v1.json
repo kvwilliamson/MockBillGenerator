@@ -1,0 +1,193 @@
+{
+  "generatedData": {
+    "mode": "SPLIT",
+    "facilityBill": {
+      "bill_data": {
+        "provider": {
+          "name": "Mass General Hospital",
+          "address": "55 Fruit St, Boston, MA 02114",
+          "contact": "800-555-0199"
+        },
+        "npi": "1537411021",
+        "taxId": "43-2988190",
+        "patientName": "Eleanor Vance",
+        "patientDOB": "1948-07-22",
+        "patientId": "MRN-2271422",
+        "accountNumber": "AC-2673973",
+        "admissionDate": "2026-02-11",
+        "dischargeDate": "2026-02-11",
+        "statementDate": "2026-03-17",
+        "statementId": "ST-A6LDBA",
+        "dueDate": "Upon Receipt",
+        "icd10": "W18.30XA - Fall on and unspecified object, initial encounter, R20.2 - Paresthesia of skin, I10 - Essential (primary) hypertension, M19.90 - Osteoarthritis, unspecified",
+        "insurance": "Uninsured / Self-Pay",
+        "insuranceStatus": "Active",
+        "tob": "131",
+        "notes": "**Status**: Financial Assistance Application Pending. (Gross Charges Applied)",
+        "lineItems": [
+          {
+            "date": "02/10/2026",
+            "timestamp": "02/10/2026 10:02",
+            "code": "G0332",
+            "description": "TRAUMA ACTIVATION",
+            "revCode": "0450",
+            "qty": 1,
+            "unitPrice": 7500.12,
+            "total": 7500.12
+          },
+          {
+            "date": "02/10/2026",
+            "timestamp": "02/10/2026 10:35",
+            "code": "36415",
+            "description": "VENIPUNCTURE",
+            "revCode": "0450",
+            "qty": 1,
+            "unitPrice": 125.67,
+            "total": 125.67
+          },
+          {
+            "date": "02/10/2026",
+            "timestamp": "02/10/2026 10:56",
+            "code": "A4550",
+            "description": "COLD COMPRESS",
+            "revCode": "0450",
+            "qty": 1,
+            "unitPrice": 35.99,
+            "total": 35.99
+          },
+          {
+            "date": "02/10/2026",
+            "timestamp": "02/10/2026 11:27",
+            "code": "99284-TC",
+            "description": "ED VISIT LVL 4",
+            "revCode": "0450",
+            "qty": 1,
+            "unitPrice": 4000.55,
+            "total": 4000.55
+          }
+        ],
+        "subtotal": 11662.33,
+        "adjustments": 0,
+        "insPaid": 0,
+        "grandTotal": 11662.33,
+        "labels": {
+          "account": "Account #",
+          "statementDate": "Statement Date",
+          "dueDate": "Payment Due"
+        }
+      },
+      "scenarioId": "2",
+      "scenarioName": "Trauma Activation Abuse"
+    },
+    "professionalBill": {
+      "bill_data": {
+        "provider": {
+          "name": "Emergency Physicians of Boston",
+          "address": "PO BOX 555, PHYSICIAN BILLING SVCS",
+          "contact": "800-555-0199"
+        },
+        "npi": "1623985342",
+        "taxId": "89-3351270",
+        "patientName": "Eleanor Vance",
+        "patientDOB": "1948-07-22",
+        "patientId": "MRN-2271422",
+        "accountNumber": "AC-9788531",
+        "admissionDate": "2026-02-11",
+        "dischargeDate": "2026-02-11",
+        "statementDate": "2026-03-17",
+        "statementId": "ST-RM6UVC",
+        "dueDate": "Upon Receipt",
+        "icd10": "W18.30XA - Fall on and unspecified object, initial encounter, R20.2 - Paresthesia of skin, I10 - Essential (primary) hypertension, M19.90 - Osteoarthritis, unspecified",
+        "insurance": "Uninsured / Self-Pay",
+        "insuranceStatus": "Active",
+        "tob": "1500",
+        "notes": "**Status**: Financial Assistance Application Pending. (Gross Charges Applied)",
+        "lineItems": [
+          {
+            "date": "02/10/2026",
+            "timestamp": "02/10/2026 08:44",
+            "code": "99284-26",
+            "description": "ED PHYSICIAN VISIT 4",
+            "revCode": "0981",
+            "qty": 1,
+            "unitPrice": 550.75,
+            "total": 550.75
+          }
+        ],
+        "subtotal": 550.75,
+        "adjustments": 0,
+        "insPaid": 0,
+        "grandTotal": 550.75,
+        "labels": {
+          "account": "Account #",
+          "statementDate": "Statement Date",
+          "dueDate": "Payment Due"
+        }
+      },
+      "scenarioId": "2",
+      "scenarioName": "Trauma Activation Abuse"
+    },
+    "review_report": {
+      "detectableFromBill": false,
+      "explanation": "The bill includes a trauma activation fee (represented by CPT code 99284-TC for facility charges) which is not supported by the clinical documentation. The patient's presentation, vital signs, examination findings, and diagnosis indicate a minor fall at home with no significant injuries, not a trauma activation event.",
+      "missingInfo": "Trauma activation criteria protocols and guidelines for the facility."
+    },
+    "clinical_truth": {
+      "patient": {
+        "name": "Eleanor Vance",
+        "dob": "1948-07-22",
+        "gender": "F"
+      },
+      "encounter": {
+        "date_of_service": "2026-02-11",
+        "chief_complaint": "Fall at home",
+        "hpi": "Ms. Vance is an 77-year-old female with a history of hypertension and osteoarthritis who presents to the Emergency Department after a witnessed fall at home approximately 30 minutes prior to arrival. The patient was walking in her kitchen when she tripped over a rug. She denies loss of consciousness, chest pain, shortness of breath, or any focal neurological deficits. She reports no head trauma, and denies any pain beyond mild, diffuse bruising to her bilateral lower extremities. She denies any witnesses to the fall or mechanism of injury beyond tripping. Patient lives alone and denies any difficulty ambulating prior to the event. She states she was able to stand up independently after the fall. She did not strike her head.",
+        "exam_notes": "Vital Signs: T 98.6F, HR 72, RR 16, BP 138/78, SpO2 99% on room air.  Patient is alert and oriented x4, in no acute distress.  General: Appears comfortable and well-nourished. HEENT: Normocephalic, atraumatic. Pupils equal, round, and reactive to light. Oral mucosa moist. Neck: Supple, no JVD, no lymphadenopathy. Lungs: Clear to auscultation bilaterally. Cardiac: Regular rate and rhythm, no murmurs, rubs, or gallops. Abdomen: Soft, non-tender, non-distended, bowel sounds normal. Extremities: No gross deformities. Mild ecchymosis noted to anterior bilateral tibias, non-tender to palpation. Full range of motion. Neurological: Grossly intact. Strength 5/5 in all extremities. Sensation intact to light touch. Gait is steady, no ataxia observed. Cranial nerves II-XII intact.",
+        "diagnosis_narrative": "Contusion of lower extremity, unspecified.",
+        "plan": "1. No acute injuries identified. 2. Application of ice packs to bilateral lower extremities for comfort. 3. Return to work/home instructions provided. 4. Patient discharged home in stable condition with instructions to follow up with primary care physician if symptoms worsen or new symptoms develop."
+      }
+    },
+    "scenario_meta": {
+      "scenarioId": "2",
+      "scenarioName": "Trauma Activation Abuse",
+      "description": "Trauma activation fee billed without trauma criteria",
+      "mockBillName": "MB-CCSI-TRAUMA-ER-v1",
+      "categoryCode": "CCSI",
+      "scenarioCode": "TRAUMA",
+      "careSetting": "ER",
+      "narrative": "Minor fall at home; patient brought to trauma center. No major injuries.",
+      "codingInstructions": "Add trauma activation code.",
+      "billingInstructions": "Include trauma activation fee line item even if criteria not met."
+    }
+  },
+  "reviewReport": {
+    "detectableFromBill": false,
+    "explanation": "The bill includes a trauma activation fee (represented by CPT code 99284-TC for facility charges) which is not supported by the clinical documentation. The patient's presentation, vital signs, examination findings, and diagnosis indicate a minor fall at home with no significant injuries, not a trauma activation event.",
+    "missingInfo": "Trauma activation criteria protocols and guidelines for the facility."
+  },
+  "agentLogs": [],
+  "selectedScenarioId": "2",
+  "v3PayerType": "Self-Pay",
+  "splitTab": "FACILITY",
+  "gfeData": null,
+  "mrData": {
+    "patient": {
+      "name": "Eleanor Vance",
+      "dob": "1948-07-22",
+      "gender": "F"
+    },
+    "encounter": {
+      "date_of_service": "2026-02-11",
+      "chief_complaint": "Fall at home",
+      "hpi": "Ms. Vance is an 77-year-old female with a history of hypertension and osteoarthritis who presents to the Emergency Department after a witnessed fall at home approximately 30 minutes prior to arrival. The patient was walking in her kitchen when she tripped over a rug. She denies loss of consciousness, chest pain, shortness of breath, or any focal neurological deficits. She reports no head trauma, and denies any pain beyond mild, diffuse bruising to her bilateral lower extremities. She denies any witnesses to the fall or mechanism of injury beyond tripping. Patient lives alone and denies any difficulty ambulating prior to the event. She states she was able to stand up independently after the fall. She did not strike her head.",
+      "exam_notes": "Vital Signs: T 98.6F, HR 72, RR 16, BP 138/78, SpO2 99% on room air.  Patient is alert and oriented x4, in no acute distress.  General: Appears comfortable and well-nourished. HEENT: Normocephalic, atraumatic. Pupils equal, round, and reactive to light. Oral mucosa moist. Neck: Supple, no JVD, no lymphadenopathy. Lungs: Clear to auscultation bilaterally. Cardiac: Regular rate and rhythm, no murmurs, rubs, or gallops. Abdomen: Soft, non-tender, non-distended, bowel sounds normal. Extremities: No gross deformities. Mild ecchymosis noted to anterior bilateral tibias, non-tender to palpation. Full range of motion. Neurological: Grossly intact. Strength 5/5 in all extremities. Sensation intact to light touch. Gait is steady, no ataxia observed. Cranial nerves II-XII intact.",
+      "diagnosis_narrative": "Contusion of lower extremity, unspecified.",
+      "plan": "1. No acute injuries identified. 2. Application of ice packs to bilateral lower extremities for comfort. 3. Return to work/home instructions provided. 4. Patient discharged home in stable condition with instructions to follow up with primary care physician if symptoms worsen or new symptoms develop."
+    }
+  },
+  "analysisData": null,
+  "deepDiveData": null,
+  "supplementalData": null,
+  "modifiedHtml": {},
+  "viewMode": "BILL"
+}

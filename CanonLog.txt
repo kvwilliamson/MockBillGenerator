@@ -1,0 +1,34 @@
+*********************
+Filename: 1-MB-CCSI-EMLV5-ER-v1
+Scenario Selected: ER E/M Level Inflation
+Description: ER visit billed at Level 5 without supporting complexity
+Narrative (Read-Only): Patient presents to the ER with mild chest discomfort. Vitals stable, ECG performed.
+Truth Validity report:
+Detectable Error: ⚠️ Detectable
+        Analysis: The bill includes CPT code 99285 (Emergency Department Visit for the Evaluation and Management of a 
+        patient, which requires a physician or other qualified health care professional of the emergency department, a 
+        comprehensive history, a comprehensive examination, and moderate complexity medical decision making) billed twice 
+        for both facility and professional charges. However, the clinical record indicates a patient presenting with mild 
+        chest discomfort, stable vitals, and a benign ECG, managed with basic interventions and discharge. This clinical 
+        picture does not support the complexity required for a Level 5 E/M service (99285). A lower-level E/M code (e.g., 
+        99283 or 99284) would be more appropriate for this presentation.
+        Investigation Needs: Detailed documentation of the history of present illness, review of systems, physical 
+        examination findings, and medical decision making to justify the selected E/M level. Comparison of the billed 
+        E/M code with the documented services and complexity is crucial.
+************************
+
+Filename: 2-MB-CCSI-TRAUMA-ER-v1
+Scenario Selected: Trauma Activation Abuse
+Description: Trauma activation fee billed without trauma criteria
+Narrative (Read-Only): 
+Minor fall at home; patient brought to trauma center. No major injuries.
+Truth Validity report:
+Detectable Error: ✅ Likely Hidden
+        Analysis: The bill includes a trauma activation fee (represented by CPT 
+code 99284-TC for facility charges) which is not supported by the clinical docum
+entation. The patient's presentation, vital signs, examination findings, and dia
+gnosis indicate a minor fall at home with no significant injuries, not a trauma 
+activation event.
+        Investigation Needs: Trauma activation criteria protocols and guidelines
+ for the facility.
+************************
