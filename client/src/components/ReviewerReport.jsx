@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, AlertTriangle, Info, GripHorizontal } from 'lucide-react';
 
-export const ReviewerReport = ({ report }) => {
-    if (!report) return null;
-
-    const isDetectable = report.detectableFromBill;
+export const ReviewerReport = ({ report, onLogCanon, onReRun }) => {
+    const isDetectable = report?.detectableFromBill;
     const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 500 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -22,29 +20,22 @@ export const ReviewerReport = ({ report }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const handleMouseDown = (e) => {
-        setIsDragging(true);
-        setDragOffset({
-            x: e.clientX - position.x,
-            y: e.clientY - position.y
-        });
-    };
-
-    const handleMouseMove = (e) => {
-        if (isDragging) {
-            setPosition({
-                x: e.clientX - dragOffset.x,
-                y: e.clientY - dragOffset.y
-            });
-        }
-    };
-
-    const handleMouseUp = () => {
-        setIsDragging(false);
-    };
-
-    // Attach global listeners for smooth dragging outside the div
+    // Attach global listeners for smooth dragging outside the div (Needs to be conditional on drag, not report)
+    // Actually, hooks always run.
     useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (isDragging) {
+                setPosition({
+                    x: e.clientX - dragOffset.x,
+                    y: e.clientY - dragOffset.y
+                });
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
         if (isDragging) {
             window.addEventListener('mousemove', handleMouseMove);
             window.addEventListener('mouseup', handleMouseUp);
@@ -56,7 +47,17 @@ export const ReviewerReport = ({ report }) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging]);
+    }, [isDragging, dragOffset]); // Added dragOffset to deps
+
+    const handleMouseDown = (e) => {
+        setIsDragging(true);
+        setDragOffset({
+            x: e.clientX - position.x,
+            y: e.clientY - position.y
+        });
+    };
+
+    if (!report) return null;
 
     return (
         <div
@@ -119,7 +120,21 @@ export const ReviewerReport = ({ report }) => {
                         </p>
                     </div>
                 )}
-
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={onReRun}
+                        className="flex-1 bg-amber-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-amber-700 transition flex items-center justify-center gap-2"
+                    >
+                        <span>🔄 Re-Run Analysis</span>
+                    </button>
+                    <button
+                        onClick={onLogCanon}
+                        className="flex-1 bg-slate-800 text-white text-xs font-bold py-2 rounded-lg hover:bg-slate-900 transition flex items-center justify-center gap-2"
+                    >
+                        <span>📝 Log It</span>
+                    </button>
+                </div>
             </div>
         </div>
     );

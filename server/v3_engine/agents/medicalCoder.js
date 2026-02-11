@@ -84,23 +84,24 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
         You must decide which bill each code belongs to.
         
         1.  **FACILITY BILL (UB-04) ONLY**:
-            -   **Laboratory (8xxxx)**: ALL routine labs (CBC, BMP, Troponin) are Facility ONLY (Technical component). Do NOT put these on the Pro bill.
+            -   **Laboratory (8xxxx)**: ALL routine labs (CBC, BMP, Troponin) are Facility ONLY. Do NOT put these on the Pro bill.
             -   **Nursing/Admin (3xxxx, 9xxxx)**: Venipuncture (36415), IV Infusion (96360), Vaccines (G0001). Facility ONLY.
             -   **Facility E/M**: The Room Fee (e.g. 99285).
             
         2.  **SHARED ITEMS (Radiology/Cardiology)**:
-            -   **Technical Component (-TC)**: Goes on **FACILITY BILL**. Append modifier `- TC` (e.g. 71045-TC).
-            -   **Professional Component (-26)**: Goes on **PROFESSIONAL BILL**. Append modifier `- 26` (e.g. 71045-26).
-            -   **Example**: Chest X-Ray (71045) must appear on BOTH bills, but with different modifiers.
+            -   **IF YOU ASSIGN A RADIOLOGY (7xxxx) OR CARDIOLOGY CODE**:
+                -   Must appear in **facility_codes** with modifier '-TC'.
+                -   Must appear in **professional_codes** with modifier '-26'.
+            -   **Example**: Chest X-Ray (71045) -> Facility: '71045-TC', Pro: '71045-26'.
             
         3.  **PROFESSIONAL BILL (CMS-1500) ONLY**:
             -   **Professional E/M**: The Doctor's time (e.g. 99285).
             -   **Surgical Procedures**: Doctor's fee only (e.g. 12001).
             
         **EXAMPLE SPLIT**:
-        - CBC (85025) -> Facility: [85025], Pro: [NONE].
-        - X-Ray (71045) -> Facility: [71045-TC], Pro: [71045-26].
-        - ER Visit -> Facility: [99285], Pro: [99285].
+        - CBC (85025) -> Facility: '85025', Pro: [NONE].
+        - X-Ray (71045) -> Facility: '71045-TC', Pro: '71045-26'.
+        - ER Visit -> Facility: '99285', Pro: '99285'.
         
         **RETURN JSON**:
         {
@@ -124,16 +125,42 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
+    console.log("[V3 Phase 3] Raw AI Text:", text.substring(0, 500) + "..."); // Validated Log
+
     const aiData = parseAndValidateJSON(text);
+
+    // Force default if parsing fails but returns partial data
+    if (!aiData.cpt_codes && !aiData.facility_codes) {
+      throw new Error("Invalid structure returned by Coder");
+    }
+
+    // --- CRITICAL CONSTRAINT ENFORCEMENT: MODIFIERS ---
+    if (aiData.facility_codes) {
+      // Enforce -TC on Facility E/M and Shared Items
+      aiData.facility_codes.forEach(code => {
+        if ((code.code.startsWith('99') || code.code.startsWith('7') || code.code.startsWith('93')) && !code.code.includes('-')) {
+          code.code += '-TC';
+        }
+      });
+
+      // Enforce -26 on Professional E/M and Shared Items
+      aiData.professional_codes.forEach(code => {
+        if ((code.code.startsWith('99') || code.code.startsWith('7') || code.code.startsWith('93')) && !code.code.includes('-')) {
+          code.code += '-26';
+        }
+      });
+    }
 
     const count = aiData.cpt_codes ? aiData.cpt_codes.length : (aiData.facility_codes?.length || 0);
     console.log(`[V3 Phase 3] Medical Coder: Assigned ${count} services. Mode: ${aiData.facility_codes ? 'SPLIT' : 'GLOBAL'}`);
     return aiData;
   } catch (error) {
-    console.error("Medical Coder Failed:", error);
+    console.error("Medical Coder Failed (CRITICAL):", error);
+    // EMERGENCY FALLBACK TO PREVENT 500 ERROR
     return {
-      icd_codes: [{ code: "R69", description: "Illness, unspecified" }],
-      cpt_codes: [{ code: "99213", description: "Office visit", quantity: 1 }]
+      icd_codes: [{ code: "R69", description: "Illness, unspecified (Fallback)" }],
+      facility_codes: [{ code: "99285", billing_description: "ER VISIT LVL 5", type: "FACILITY_EM", quantity: 1 }],
+      professional_codes: [{ code: "99285", billing_description: "ER PHYSICIAN VISIT 5", type: "PRO_EM", quantity: 1 }]
     };
   }
 }

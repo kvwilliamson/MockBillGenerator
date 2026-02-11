@@ -36,6 +36,9 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         reviewTotal = dataToReview.grandTotal;
     }
 
+    // DEBUG: Prove Context to User
+    console.log("[V3 Phase 7] Reviewer Context (Snippet):", reviewContext.substring(0, 300) + "...");
+
     const prompt = `
         You are "The Internal Auditor". Your job is to double-check the bill before it goes out.
         
@@ -53,12 +56,12 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         **TASK**:
         Generate a "Review Report" that explains WHY this bill is incorrect based on the clinical truth.
         
-        **RETURN JSON**:
-        {
-            "detectableFromBill": true/false (Can a human spot this error just by looking at the bill?),
+        ** RETURN JSON **:
+    {
+        "detectableFromBill": true / false(Can a human spot this error just by looking at the bill ?),
             "explanation": "concise explanation of the discrepancy...",
-            "missingInfo": "What else would be needed to prove this error? (e.g. 'Medical Records needed to confirm level of service')"
-        }
+                "missingInfo": "What else would be needed to prove this error? (e.g. 'Medical Records needed to confirm level of service')"
+    }
     `;
 
     try {
@@ -66,7 +69,7 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         const text = result.response.text();
         const aiData = parseAndValidateJSON(text);
 
-        console.log(`[V3 Phase 7] Reviewer: Analysis complete.`);
+        console.log(`[V3 Phase 7]Reviewer: Analysis complete.`);
         return aiData;
     } catch (error) {
         console.error("Reviewer Failed:", error);

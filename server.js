@@ -1998,6 +1998,178 @@ app.post('/render-pdf', async (req, res) => {
     }
 });
 
+// --- MOCK BILLS FILE SYSTEM ENDPOINTS ---
+
+const BILLS_DIR = path.resolve('./Mock_Bills');
+
+// Helper to sanitize filenames
+const sanitizeFilename = (name) => {
+    return name.replace(/[^a-zA-Z0-9-_]/g, '_');
+};
+
+// LIST BILLS
+app.get('/list-bills', async (req, res) => {
+    try {
+        const files = await fs.promises.readdir(BILLS_DIR);
+        // Only JSON files
+        const jsonFiles = files.filter(f => f.endsWith('.json'));
+        res.json({ files: jsonFiles });
+    } catch (error) {
+        console.error("[List Bills Error]", error);
+        res.status(500).json({ error: "Failed to list bills" });
+    }
+});
+
+// SAVE BILL
+app.post('/save-bill', async (req, res) => {
+    try {
+        const { filename, data } = req.body;
+        if (!filename || !data) {
+            return res.status(400).json({ error: "Filename and data are required" });
+        }
+
+        const safeName = sanitizeFilename(filename);
+        const filePath = path.join(BILLS_DIR, `${safeName}.json`);
+
+        // Pretty print JSON
+        await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+
+        console.log(`[MockBill] Saved: ${filePath}`);
+        res.json({ success: true, message: "Bill saved successfully", filename: `${safeName}.json` });
+    } catch (error) {
+        console.error("[Save Bill Error]", error);
+        res.status(500).json({ error: "Failed to save bill" });
+    }
+});
+
+// LOAD BILL
+app.post('/load-bill', async (req, res) => {
+    try {
+        const { filename } = req.body;
+        if (!filename) {
+            return res.status(400).json({ error: "Filename is required" });
+        }
+
+        // Prevent directory traversal
+        const safeName = path.basename(filename);
+        const filePath = path.join(BILLS_DIR, safeName);
+
+        const content = await fs.promises.readFile(filePath, 'utf8');
+        const data = JSON.parse(content);
+
+        console.log(`[MockBill] Loaded: ${filePath}`);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error("[Load Bill Error]", error);
+        res.status(500).json({ error: "Failed to load bill" });
+    }
+});
+
+// --- CANON LOGGING ENDPOINT ---
+app.post('/log-canon-entry', async (req, res) => {
+    try {
+        const { filename, scenario, description, narrative, report } = req.body;
+
+        // Ensure values are strings
+        const safeFile = filename || "Unknown";
+        const safeScenario = scenario || "Unknown";
+        const safeDesc = description || "N/A";
+
+        // Wrap text helper (hard wrap at 80 chars)
+        const wrapText = (text, maxLength = 80) => {
+            if (!text) return "";
+            // Replace existing newlines with spaces to re-flow, or keep them? 
+            // Better to keep existing paragraphs but wrap long lines.
+            return text.split('\n').map(line => {
+                if (line.length <= maxLength) return line;
+                return line.match(new RegExp(`.{1,${maxLength}}`, 'g')).join('\n');
+            }).join('\n');
+        };
+        const safeNarrative = wrapText(narrative || "N/A");
+        const safeReport = wrapText(report || "N/A");
+
+        const timestamp = new Date().toLocaleString();
+
+        const logEntry = `
+
+Filename: ${safeFile}
+Scenario Selected: ${safeScenario}
+Description: ${safeDesc}
+Narrative (Read-Only): 
+${safeNarrative}
+Truth Validity report:
+${safeReport}
+************************
+`;
+
+        // Use path.join relative to CWD, wrapped in try/catch for permissions
+        const logPath = path.resolve('./CanonLog.txt');
+
+        // Append to file asynchronously (better perfs)
+        await fs.promises.appendFile(logPath, logEntry, 'utf8');
+
+        console.log(`[CanonLog] Entry appended: ${safeFile}`);
+        res.json({ success: true, message: "Log appended successfully" });
+    } catch (error) {
+        console.error("[CanonLog Failed]", error.message);
+        res.status(500).json({ error: "Failed to write log", details: error.message });
+    }
+});
+
+// --- RE-RUN ANALYSIS (Manual Edits) ---
+app.post('/rerun-analysis', async (req, res) => {
+    try {
+        const { billText, scenarioName, description, narrative, clinicalTruth } = req.body;
+
+        console.log(`[ReRun] Analyzing manual bill text for scenario: ${scenarioName}`);
+
+        // Instantiate model for this request scope
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+        const prompt = `
+        You are "The Internal Auditor". Your job is to double-check the bill text (which may have been manually edited) before it goes out.
+        
+        **SCENARIO**: "${scenarioName}"
+        **INTENDED ERROR**: "${description}"
+        **NARRATIVE TRUTH**: "${narrative}"
+        
+        **BILL TEXT (RAW)**:
+        ${billText}
+        
+        **CLINICAL RECORD (CONTEXT)**:
+        ${JSON.stringify(clinicalTruth || "N/A")}
+        
+        **TASK**:
+        Generate a "Review Report" that explains WHY this bill is incorrect based on the clinical truth and the scenario.
+        Consider any manual changes made to the text.
+        
+        ** RETURN JSON **:
+        {
+            "detectableFromBill": boolean (Is the error obvious from reading the bill?),
+            "explanation": "Summarize the issue clearly for a non-medical person. Mention specific codes or charges seen in the text.",
+            "missingInfo": "What else would you need to investigate further? (or 'N/A' if clear)"
+        }
+        `;
+
+        const result = await model.generateContent(prompt); // 'model' is global from init
+        const response = await result.response;
+        const text = response.text();
+
+        // Parse JSON safely
+        let jsonStart = text.indexOf('{');
+        let jsonEnd = text.lastIndexOf('}');
+        if (jsonStart === -1 || jsonEnd === -1) throw new Error("Invalid JSON from AI");
+        const jsonStr = text.substring(jsonStart, jsonEnd + 1);
+        const reviewReport = JSON.parse(jsonStr);
+
+        res.json({ success: true, reviewReport });
+
+    } catch (error) {
+        console.error("[Re-Run Error]", error);
+        res.status(500).json({ error: "Failed to re-run analysis" });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`[MockGen] Server running on http://localhost:${PORT}`);
 });

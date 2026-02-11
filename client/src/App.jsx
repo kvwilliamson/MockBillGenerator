@@ -9,6 +9,18 @@ import { TelemetryPanel } from './components/TelemetryPanel';
 import { Loader2, Download, AlertTriangle, ShieldAlert, Sparkles } from 'lucide-react';
 import v3Scenarios from './data/v3_scenarios.json';
 
+// --- PERSISTENCE HOOK ---
+function useStickyState(defaultValue, key) {
+    const [value, setValue] = useState(() => {
+        const stickyValue = window.localStorage.getItem(key);
+        return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+    });
+    React.useEffect(() => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+    }, [key, value]);
+    return [value, setValue];
+}
+
 function App() {
     // --- CONSTRAINTS ---
     const SPECIALTY_CONSTRAINTS = {
@@ -77,35 +89,35 @@ function App() {
 
     const [loading, setLoading] = useState(false); // Kept for general loading (PDFs/Analysis)
     const [activeGenerator, setActiveGenerator] = useState(null); // 'V2' | null
-    const [activeTab, setActiveTab] = useState('V3'); // 'V2' | 'V3'
+    const [activeTab, setActiveTab] = useStickyState('V3', 'MB_activeTab'); // Persist
 
     // V2 State
-    const [errorType, setErrorType] = useState('CLEAN');
-    const [specialty, setSpecialty] = useState('Emergency Medicine');
-    const [complexity, setComplexity] = useState('Low');
-    const [payerType, setPayerType] = useState('Self-Pay');
+    const [errorType, setErrorType] = useStickyState('CLEAN', 'MB_V2_Error');
+    const [specialty, setSpecialty] = useStickyState('Emergency Medicine', 'MB_V2_Spec');
+    const [complexity, setComplexity] = useStickyState('Low', 'MB_V2_Comp');
+    const [payerType, setPayerType] = useStickyState('Self-Pay', 'MB_V2_Payer');
 
     // V3 State
-    const [selectedScenarioId, setSelectedScenarioId] = useState(v3Scenarios[0]?.id || '1');
-    const [v3PayerType, setV3PayerType] = useState('Self-Pay');
-    const [splitTab, setSplitTab] = useState('FACILITY'); // 'FACILITY' | 'PROFESSIONAL'
+    const [selectedScenarioId, setSelectedScenarioId] = useStickyState(v3Scenarios[0]?.id || '1', 'MB_V3_Scenario');
+    const [v3PayerType, setV3PayerType] = useStickyState('Self-Pay', 'MB_V3_Payer');
+    const [splitTab, setSplitTab] = useStickyState('FACILITY', 'MB_SplitTab');
     const [splitDownloadMode, setSplitDownloadMode] = useState('SEPARATE'); // 'COMBINED' | 'SEPARATE'
-    const [reviewReport, setReviewReport] = useState(null); // Phase 7 Report
-    const [agentLogs, setAgentLogs] = useState([]); // Telemetry Logs
+    const [reviewReport, setReviewReport] = useStickyState(null, 'MB_ReviewReport'); // Persist Report
+    const [agentLogs, setAgentLogs] = useStickyState([], 'MB_AgentLogs'); // Persist Logs
 
     const [scanMode, setScanMode] = useState(false);
     const [quickLoadInput, setQuickLoadInput] = useState('');
 
-    const [generatedData, setGeneratedData] = useState(null);
-    const [gfeData, setGfeData] = useState(null);
-    const [mrData, setMrData] = useState(null);
-    const [analysisData, setAnalysisData] = useState(null);
-    const [deepDiveData, setDeepDiveData] = useState(null);
-    const [supplementalData, setSupplementalData] = useState(null);
-    const [viewMode, setViewMode] = useState('BILL'); // 'BILL', 'GFE', 'MR'
+    const [generatedData, setGeneratedData] = useStickyState(null, 'MB_GeneratedData'); // CRITICAL PERSISTENCE
+    const [gfeData, setGfeData] = useStickyState(null, 'MB_GFE');
+    const [mrData, setMrData] = useStickyState(null, 'MB_MR');
+    const [analysisData, setAnalysisData] = useStickyState(null, 'MB_V2_Analysis');
+    const [deepDiveData, setDeepDiveData] = useStickyState(null, 'MB_V2_DeepDive');
+    const [supplementalData, setSupplementalData] = useStickyState(null, 'MB_V2_Supp');
+    const [viewMode, setViewMode] = useStickyState('BILL', 'MB_ViewMode');
     const [error, setError] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [modifiedHtml, setModifiedHtml] = useState(null); // Persist edits even if toggled off
+    const [modifiedHtml, setModifiedHtml] = useStickyState({}, 'MB_ModifiedHtml_V3'); // Object for keyed edits
     const previewRef = React.useRef(null);
 
     // V1 Generator Loop Removed (Legacy)
@@ -114,11 +126,13 @@ function App() {
         setActiveGenerator('V3');
         setLoading(true);
         setError(null);
+        // Clean Slate (Will persist NULL to storage)
         setGeneratedData(null);
         setGfeData(null);
         setMrData(null);
         setReviewReport(null);
         setAgentLogs([]);
+        setModifiedHtml({}); // Explicitly clear edits (empty object)
         setViewMode('BILL');
 
         try {
@@ -155,9 +169,153 @@ function App() {
         } catch (err) {
             console.error(err);
             setError('Failed to generate V3 Bill. Check backend logs.');
+            // --- END OF handleGenerateV3 ---
         } finally {
             setLoading(false);
             setActiveGenerator(null);
+        }
+    }; // Properly closing handleGenerateV3
+
+    // --- SAVE / LOAD LOGIC ---
+    const [showFileModal, setShowFileModal] = useState(false);
+    const [fileList, setFileList] = useState([]);
+    const [saveFileName, setSaveFileName] = useState('');
+
+    const handleFetchBills = async () => {
+        try {
+            const res = await axios.get('http://localhost:4000/list-bills');
+            setFileList(res.data.files || []);
+            setShowFileModal(true);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to list bills.");
+        }
+    };
+
+    const handleSaveBill = async () => {
+        if (!generatedData) return alert("Nothing to save!");
+
+        // Default filename
+        let defaultName = `mock-bill-${selectedScenarioId}`;
+        if (generatedData.scenario_meta?.mockBillName) {
+            const id = generatedData.scenario_meta.scenarioId || '0';
+            defaultName = `${id}-${generatedData.scenario_meta.mockBillName}`;
+        }
+
+        const name = prompt("Enter filename to save (in Mock_Bills):", defaultName);
+        if (!name) return;
+
+        const payload = {
+            filename: name,
+            data: {
+                // Persistent State
+                generatedData,
+                reviewReport,
+                agentLogs,
+                selectedScenarioId,
+                v3PayerType,
+                splitTab,
+                gfeData,
+                mrData,
+                analysisData,
+                deepDiveData,
+                supplementalData,
+                modifiedHtml: modifiedHtml || (previewRef.current ? previewRef.current.innerHTML : null), // Save current edit state
+                viewMode
+            }
+        };
+
+        try {
+            await axios.post('http://localhost:4000/save-bill', payload);
+            alert("Bill Saved Successfully!");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to save bill.");
+        }
+    };
+
+    const handleLoadBill = async (filename) => {
+        try {
+            const res = await axios.post('http://localhost:4000/load-bill', { filename });
+            const d = res.data.data;
+
+            // Restore State
+            if (d.generatedData) setGeneratedData(d.generatedData);
+            if (d.reviewReport) setReviewReport(d.reviewReport);
+            if (d.agentLogs) setAgentLogs(d.agentLogs);
+            if (d.selectedScenarioId) setSelectedScenarioId(d.selectedScenarioId);
+            if (d.v3PayerType) setV3PayerType(d.v3PayerType);
+            if (d.splitTab) setSplitTab(d.splitTab);
+            if (d.gfeData) setGfeData(d.gfeData);
+            if (d.mrData) setMrData(d.mrData);
+            if (d.analysisData) setAnalysisData(d.analysisData);
+            if (d.deepDiveData) setDeepDiveData(d.deepDiveData);
+            if (d.supplementalData) setSupplementalData(d.supplementalData);
+            if (d.modifiedHtml) setModifiedHtml(d.modifiedHtml);
+            if (d.viewMode) setViewMode(d.viewMode);
+
+            setShowFileModal(false);
+            alert("Bill Loaded!");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to load bill.");
+        }
+    };
+    const handleReRunAnalysis = async () => {
+        if (!generatedData || !previewRef.current) return;
+
+        const billText = previewRef.current.innerText; // Get what is currently visible
+        const meta = generatedData.scenario_meta || {};
+        const clinical = generatedData.clinical_truth || {};
+
+        try {
+            // alert("Starting Re-Analysis..."); // Optional feedback
+            const response = await axios.post('http://localhost:4000/rerun-analysis', {
+                billText,
+                scenarioName: meta.scenarioName || "Unknown",
+                description: meta.description || "N/A",
+                narrative: meta.narrative || "N/A",
+                clinicalTruth: clinical.encounter || clinical // Handle nested structure
+            });
+
+            if (response.data.success) {
+                setReviewReport(response.data.reviewReport);
+                alert("Analysis Updated based on your edits!");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Failed to re-run analysis.");
+        }
+    };
+
+    const handleLogCanon = async () => {
+        if (!generatedData || !reviewReport) return;
+
+        let fileNameBase = `mock-bill-${selectedScenarioId}`;
+        if (generatedData.scenario_meta?.mockBillName) {
+            const id = generatedData.scenario_meta.scenarioId || '0';
+            fileNameBase = `${id}-${generatedData.scenario_meta.mockBillName}`;
+        }
+
+        // Construct Validity Report String
+        const reportText = `
+        Detectable Error: ${reviewReport.detectableFromBill ? '⚠️ Detectable' : '✅ Likely Hidden'}
+        Analysis: ${reviewReport.explanation}
+        Investigation Needs: ${reviewReport.missingInfo}
+        `.trim();
+
+        try {
+            await axios.post('http://localhost:4000/log-canon-entry', {
+                filename: fileNameBase,
+                scenario: generatedData.scenario_meta?.scenarioName || "Unknown",
+                description: generatedData.scenario_meta?.description || "N/A",
+                narrative: generatedData.scenario_meta?.narrative || "N/A",
+                report: reportText
+            });
+            alert("Entry Logged to CanonLog.txt!");
+        } catch (err) {
+            console.error("Logging Error:", err);
+            alert("Failed to log entry.");
         }
     };
 
@@ -634,15 +792,61 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                 {/* V3 TAB CONTENT */}
                 {activeTab === 'V3' && (
                     <div className="space-y-6">
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg">
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg space-y-3">
                             <h3 className="text-emerald-800 font-bold flex items-center gap-2 mb-2 text-sm">
                                 <Sparkles size={16} />
                                 Canonical Scenario Selection
                             </h3>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSaveBill}
+                                    disabled={!generatedData}
+                                    className={`flex-1 font-bold py-1.5 px-3 rounded text-xs transition ${generatedData ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
+                                >
+                                    💾 Save Bill
+                                </button>
+                                <button
+                                    onClick={handleFetchBills}
+                                    className="flex-1 bg-amber-600 text-white font-bold py-1.5 px-3 rounded text-xs hover:bg-amber-700 transition"
+                                >
+                                    📂 Load Bill
+                                </button>
+                            </div>
                             <p className="text-xs text-emerald-700 leading-relaxed">
                                 V3 was created for generating the complete Canon of all possible medical billing overcharging scenarios.
                             </p>
                         </div>
+
+                        {/* FILE MODAL */}
+                        {showFileModal && (
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                                    <div className="bg-slate-100 p-4 border-b flex justify-between items-center">
+                                        <h3 className="font-bold text-slate-700">Load Mock Bill</h3>
+                                        <button onClick={() => setShowFileModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+                                    </div>
+                                    <div className="p-4 max-h-[400px] overflow-y-auto space-y-2">
+                                        {fileList.length === 0 ? (
+                                            <p className="text-sm text-slate-500 italic text-center">No saved bills found.</p>
+                                        ) : (
+                                            fileList.map(f => (
+                                                <button
+                                                    key={f}
+                                                    onClick={() => handleLoadBill(f)}
+                                                    className="w-full text-left p-3 rounded hover:bg-slate-50 border border-transparent hover:border-slate-200 transition flex items-center gap-2 group"
+                                                >
+                                                    <span className="text-xl">📄</span>
+                                                    <div>
+                                                        <div className="text-sm font-bold text-slate-700 group-hover:text-blue-600">{f}</div>
+                                                        <div className="text-[10px] text-slate-400">Mock Bill JSON</div>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Select Issue Scenario</label>
@@ -1187,105 +1391,135 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Statement:</span>
                             <span className="text-sm font-mono font-bold text-blue-700">{generatedData.billName}</span>
                         </div>
-                        <button
-                            onClick={() => {
-                                if (isEditing && previewRef.current) {
-                                    setModifiedHtml(previewRef.current.innerHTML);
-                                }
-                                setIsEditing(!isEditing);
-                            }}
-                            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-2 ${isEditing ? 'bg-emerald-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'}`}
-                        >
-                            {isEditing ? '💾 Apply Edits' : modifiedHtml ? '✏️ Continue Editing' : '✏️ Modify Text'}
-                        </button>
-                        {modifiedHtml && !isEditing && (
-                            <button
-                                onClick={() => setModifiedHtml(null)}
-                                className="text-[10px] text-red-500 hover:underline font-bold"
-                            >
-                                Reset Original
-                            </button>
-                        )}
                     </div>
                 )}
 
                 {/* View Mode Tabs */}
                 {generatedData && (
-                    <div className="flex gap-2 mb-4">
-                        <button
-                            onClick={() => setViewMode('BILL')}
-                            className={`px-4 py-2 rounded-t-lg font-bold ${viewMode === 'BILL' ? 'bg-white text-blue-600' : 'bg-slate-300 text-slate-600'}`}
-                        >
-                            Statement
-                        </button>
-                        <button
-                            onClick={() => gfeData && setViewMode('GFE')}
-                            disabled={!gfeData}
-                            className={`px-4 py-2 rounded-t-lg font-bold ${viewMode === 'GFE' ? 'bg-white text-blue-600' : 'bg-slate-300 text-slate-500'}`}
-                        >
-                            Good Faith Estimate
-                        </button>
-                        <button
-                            onClick={() => mrData && setViewMode('MR')}
-                            disabled={!mrData}
-                            className={`px-4 py-2 rounded-t-lg font-bold ${viewMode === 'MR' ? 'bg-white text-blue-600' : 'bg-slate-300 text-slate-500'}`}
-                        >
-                            Medical Record
-                        </button>
+                    <div className="flex justify-between items-end mb-4">
+                        {/* VIEW MODE TABS */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setViewMode('BILL')}
+                                className={`px-4 py-2 rounded-t-lg font-bold text-sm ${viewMode === 'BILL' ? 'bg-white text-blue-600 shadow-sm border-t border-x border-slate-200' : 'bg-slate-300 text-slate-600 hover:bg-slate-300'}`}
+                            >
+                                Statement
+                            </button>
+                            <button
+                                onClick={() => gfeData && setViewMode('GFE')}
+                                disabled={!gfeData}
+                                className={`px-4 py-2 rounded-t-lg font-bold text-sm ${viewMode === 'GFE' ? 'bg-white text-blue-600 shadow-sm border-t border-x border-slate-200' : 'bg-slate-300 text-slate-500'}`}
+                            >
+                                GFE
+                            </button>
+                            <button
+                                onClick={() => mrData && setViewMode('MR')}
+                                disabled={!mrData}
+                                className={`px-4 py-2 rounded-t-lg font-bold text-sm ${viewMode === 'MR' ? 'bg-white text-blue-600 shadow-sm border-t border-x border-slate-200' : 'bg-slate-300 text-slate-500'}`}
+                            >
+                                Med Record
+                            </button>
+                        </div>
+
+                        {/* EDIT CONTROLS */}
+                        <div className="flex items-center gap-2 mb-1">
+                            <button
+                                onClick={() => {
+                                    const key = viewMode === 'BILL' ? splitTab : viewMode;
+                                    if (isEditing && previewRef.current) {
+                                        setModifiedHtml(prev => ({ ...prev, [key]: previewRef.current.innerHTML }));
+                                    }
+                                    setIsEditing(!isEditing);
+                                }}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-2 ${isEditing ? 'bg-emerald-600 text-white shadow-lg ring-2 ring-emerald-300' : 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 shadow-sm'}`}
+                            >
+                                {isEditing ? '💾 Finish Editing' : (modifiedHtml && modifiedHtml[viewMode === 'BILL' ? splitTab : viewMode] ? '✏️ Resume Editing' : '✏️ Edit Text')}
+                            </button>
+                            {modifiedHtml && modifiedHtml[viewMode === 'BILL' ? splitTab : viewMode] && !isEditing && (
+                                <button
+                                    onClick={() => {
+                                        const key = viewMode === 'BILL' ? splitTab : viewMode;
+                                        if (confirm("Discard edits for this view?")) {
+                                            setModifiedHtml(prev => {
+                                                const next = { ...prev };
+                                                delete next[key];
+                                                return next;
+                                            });
+                                        }
+                                    }}
+                                    className="text-[10px] text-red-500 hover:underline font-bold px-2"
+                                >
+                                    Reset
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
                 {generatedData ? (
-                    // Render the visual preview
-                    <div
-                        ref={previewRef}
-                        contentEditable={isEditing}
-                        suppressContentEditableWarning={true}
-                        onBlur={() => {
-                            if (isEditing && previewRef.current) {
-                                setModifiedHtml(previewRef.current.innerHTML);
-                            }
-                        }}
-                        className={`transform transition-all origin-center bg-white shadow-xl ${scanMode ? 'rotate-1 blur-[0.3px]' : ''} ${isEditing ? 'outline-4 outline-blue-500 shadow-2xl z-10 cursor-text' : 'outline-none'}`}
-                    >
-                        {modifiedHtml && !isEditing ? (
-                            <div dangerouslySetInnerHTML={{ __html: modifiedHtml }} />
-                        ) : (
-                            <>
-                                {viewMode === 'BILL' && (
-                                    <div className="flex flex-col">
-                                        {/* SPLIT BILL TOGGLE */}
-                                        {generatedData.mode === 'SPLIT' && (
-                                            <div className="flex justify-center gap-4 mb-6 border-b pb-4">
-                                                <button
-                                                    onClick={() => setSplitTab('FACILITY')}
-                                                    className={`px-6 py-2 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'FACILITY' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
-                                                >
-                                                    🏥 Facility Statement
-                                                </button>
-                                                <button
-                                                    onClick={() => setSplitTab('PROFESSIONAL')}
-                                                    className={`px-6 py-2 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'PROFESSIONAL' ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
-                                                >
-                                                    🩺 Professional Statement
-                                                </button>
+                    <>
+                        {/* Always show Split Tabs IF applicable, regardless of Edit Mode - OUTSIDE OF CAPTURE CONTAINER */}
+                        {viewMode === 'BILL' && generatedData.mode === 'SPLIT' && (
+                            <div className="flex justify-center gap-4 mb-6">
+                                <button
+                                    onClick={() => setSplitTab('FACILITY')}
+                                    className={`px-4 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'FACILITY' ? 'bg-blue-600 text-white ring-2 ring-blue-300' : 'bg-slate-200 text-slate-500 hover:bg-slate-300 border border-slate-300'}`}
+                                >
+                                    🏥 Facility
+                                </button>
+                                <button
+                                    onClick={() => setSplitTab('PROFESSIONAL')}
+                                    className={`px-4 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm flex items-center gap-2 ${splitTab === 'PROFESSIONAL' ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-slate-200 text-slate-500 hover:bg-slate-300 border border-slate-300'}`}
+                                >
+                                    🩺 Professional
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Render the visual preview */}
+                        <div
+                            ref={previewRef}
+                            contentEditable={isEditing}
+                            suppressContentEditableWarning={true}
+                            onBlur={() => {
+                                if (isEditing && previewRef.current) {
+                                    const key = viewMode === 'BILL' ? splitTab : viewMode;
+                                    setModifiedHtml(prev => ({ ...prev, [key]: previewRef.current.innerHTML }));
+                                }
+                            }}
+                            className={`transform transition-all origin-center bg-white shadow-xl ${scanMode ? 'rotate-1 blur-[0.3px]' : ''} ${isEditing ? 'outline-4 outline-blue-500 shadow-2xl z-10 cursor-text' : 'outline-none'}`}
+                        >
+
+
+                            {(() => {
+                                const key = viewMode === 'BILL' ? splitTab : viewMode;
+                                // If we have edits for THIS tab, show them
+                                if (modifiedHtml && modifiedHtml[key]) {
+                                    return <div dangerouslySetInnerHTML={{ __html: modifiedHtml[key] }} />;
+                                }
+
+                                // DEFAULT RENDERING
+                                return (
+                                    <>
+                                        {viewMode === 'BILL' && (
+                                            <div className="flex flex-col">
+                                                {/* Note: Tabs are rendered above now */}
+                                                <BillTemplate
+                                                    data={
+                                                        generatedData.mode === 'SPLIT'
+                                                            ? (splitTab === 'PROFESSIONAL' ? generatedData.professionalBill.bill_data : generatedData.facilityBill.bill_data)
+                                                            : (generatedData.bill_data || generatedData.facilityBill?.bill_data)
+                                                    }
+                                                />
                                             </div>
                                         )}
-
-                                        <BillTemplate
-                                            data={
-                                                generatedData.mode === 'SPLIT'
-                                                    ? (splitTab === 'PROFESSIONAL' ? generatedData.professionalBill.bill_data : generatedData.facilityBill.bill_data)
-                                                    : (generatedData.bill_data || generatedData.facilityBill?.bill_data)
-                                            }
-                                        />
-                                    </div>
-                                )}
-                                {viewMode === 'GFE' && <GFETemplate data={gfeData} />}
-                                {viewMode === 'MR' && <MedicalRecordTemplate data={mrData} />}
-                            </>
-                        )}
-                    </div>
+                                        {viewMode === 'GFE' && <GFETemplate data={gfeData} />}
+                                        {viewMode === 'MR' && <MedicalRecordTemplate data={mrData} />}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400">
                         <div className="text-6xl mb-4">📄</div>
@@ -1294,7 +1528,7 @@ Generated by FairMedBill Forensic Auditor Engine V2.8
                 )}
             </div>
             {/* Reviewer Report Popup (Fixed Bottom Right) */}
-            <ReviewerReport report={reviewReport} />
+            <ReviewerReport report={reviewReport} onLogCanon={handleLogCanon} onReRun={handleReRunAnalysis} />
 
             {/* Agent Telemetry Panel (Fixed Bottom Left) */}
             <TelemetryPanel logs={agentLogs} />

@@ -98,8 +98,8 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
                     total: data.facility_line_items.reduce((s, i) => s + (i.total_charge || 0), 0)
                 },
                 professional: {
-                    line_items: data.professional_line_items,
-                    total: data.professional_line_items.reduce((s, i) => s + (i.total_charge || 0), 0)
+                    line_items: data.professional_line_items || [],
+                    total: (data.professional_line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
                 }
             };
         } else {
