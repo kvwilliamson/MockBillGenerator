@@ -130,17 +130,19 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
     }
 
     // --- CRITICAL CONSTRAINT ENFORCEMENT: MODIFIERS & REV CODE REFINEMENT ---
-    if (aiData.facility_codes) {
-      aiData.facility_codes.forEach(code => {
+    if (aiData.facility_codes || aiData.professional_codes) {
+      const facCodes = aiData.facility_codes || [];
+      const proCodes = aiData.professional_codes || [];
+
+      facCodes.forEach(code => {
         const cpt = code.code || '';
-        
+
         // 1. Enforce -TC on Facility E/M and Shared Items
         if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-TC';
         }
 
         // 2. Granularize Lab Revenue Codes (V2026.4 Expert Realism)
-        // 0301: Chemistry, 0305: Hematology, 0310: Pathology
         if (cpt.startsWith('8')) {
           const num = parseInt(cpt.substring(0, 5));
           if (num >= 80000 && num <= 84999) code.rev_code = "0301";
@@ -151,12 +153,16 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
       });
 
       // 3. Enforce -26 on Professional E/M and Shared Items
-      aiData.professional_codes.forEach(code => {
+      proCodes.forEach(code => {
         const cpt = code.code || '';
         if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-26';
         }
+        if (!code.rev_code) code.rev_code = "0981"; // Professional Service fallback
       });
+
+      aiData.facility_codes = facCodes;
+      aiData.professional_codes = proCodes;
     }
 
     const count = aiData.cpt_codes ? aiData.cpt_codes.length : (aiData.facility_codes?.length || 0);
