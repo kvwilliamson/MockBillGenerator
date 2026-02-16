@@ -1,9 +1,9 @@
-# FairMedBill Mock Bill Generator (V2.4 - "The Deceptive Era")
+# FairMedBill Mock Bill Generator (v2026.3 - "Auditor-Grade Realism")
 
-A state-of-the-art medical bill simulation engine designed to produce high-fidelity, clinically authentic, and forensically "sabotaged" mock bills. Version 2.4 introduces **Deceptive Math Sabotage**, **Deterministic Guardians**, and the **Arithmetic Meta-Audit**.
+A state-of-the-art medical bill simulation engine designed to produce high-fidelity, clinically authentic, and forensically "sabotaged" mock bills. Version 2026.3 introduces **Systemic Middleware Enforcement**, **Verified Institutional Data**, and **Federal Compliance Logic**.
 
 ## 🚀 Mission Statement
-To produce Best Known Method (BKM) real-world mock bills that look 100% authentic to auditors but contain specific, detectable forensic errors. V2.4 focuses on **Hiding the Needle**, ensuring that errors are no longer obvious "typos" but structural mismatches that require deep line-item analysis.
+To produce Best Known Method (BKM) real-world mock bills that look 100% authentic to auditors but contain specific, detectable forensic errors. V2026.3 focuses on **"True BKM Status"**, ensuring that generated bills are indistinguishable from expert-vetted documents through strict temporal, geographic, and regulatory validation.
 
 ---
 
@@ -39,24 +39,25 @@ npm run generate:error-detection
 
 ## 🛠 Features
 
-### 1. The V2.4 "Forensic" Generation Chain
+### 1. The V3.0 "Forensic" Generation Chain
 
-- **Phase 0: The Facility Scout (V2.4)**: Establishes real-world grounding. Selects U.S. facilities and generates **Deterministic, Luhn-valid identifiers** (NPI/EIN) outside the LLM.
-- **Phase 1: The Clinical Architect (V2.4)**: Generates the medical "Truth." 
-- **Phase 2: The Medical Coder (V2.4 - "The Infiltrator")**:
-    - **Complexity Lock (STRICT)**: Maps complexity levels (Low/Mod/High) to specific CPT ranges (Level 2-3 vs Level 4-5) to prevent code-drift.
-    - **Modifier Edition**: Automatically appends required modifiers (`-25`, `-RT`, `-LT`, `-50`) to "Clean" bills.
-- **Phase 3: The Financial Clerk (V2.4 - "The Aggregation Trap")**:
-    - **Hidden Math Sabotage**: In `MATH_ERROR` scenarios, the generator poisons the **Subtotal** itself. 
-    - **Consistent Deception**: Subsequent calculations (Adjustments/Grand Total) are derived from the *bad subtotal*, making the bottom-line math look superficially correct while the sum of line items is secretly invalid.
-- **Phase 4: The Publisher (V2.4 - "Administrative Guard")**:
-    - **Fiscal Year Alignment**: Calculates Patient DOB based on admission year (2026) with an off-by-one guard to match stated age exactly.
-- **Phase 5: The Polish Agent (V2.4)**: Finalizes the bill assembly, ensuring visual consistency and generating the "Provider Note" based on the clinical truth.
-- **Phase 6: Compliance Sentinel (The "Enforcer")**: Scans the final bill to ensure the requested "Gotcha" (Error Scenario) is present. If the AI was too "clean", the Sentinel forcibly injects the error (e.g., modifying dates for `IMPOSSIBLE_DATE` or adding duplicates).
-- **Phase 7: Hard Constraint Enforcer**: A deterministic safety net that fixes logical inconsistencies (e.g., mismatched discharge dates) *UNLESS* the user specifically requested a related error (e.g., it permits date errors if `IMPOSSIBLE_DATE` was requested).
+- **Phase 0: The Facility Scout (Verified Database)**: Uses `verified_facilities.json` as a single source of truth for 100% real U.S. facilities, ensuring valid addresses, NPIs, and domains.
+- **Phase 1: The Clinical Architect**: Generates the medical "Truth" with strict temporal synchronization (Admit/Discharge window enforcement).
+- **Phase 2: The Medical Coder (Standardized)**:
+    - **Nomenclature Lock**: Enforces official 2026 CPT/HCPCS descriptors via `standard_nomenclature.json`.
+    - **Rev Code Integrity**: Strict mapping of Revenue Codes to CPTs (e.g., 99285 → Rev 0450).
+- **Phase 3: The Financial Clerk (50/50 Logic)**:
+    - **Uneven Pricing**: Generates realistic "Chargemaster" pricing (e.g., $154.23).
+    - **Self-Pay Split**: Probabilistic toggle between Gross Charges (2.5x) and FMV (1.5x) for bill-level consistency.
+- **Phase 4: The Publisher (Compliance Engine)**:
+    - **Federal Mandates**: Automatically appends No Surprises Act (NSA) and Good Faith Estimate (GFE) disclosures for Self-Pay/Uninsured.
+    - **Prompt Pay**: Adds conditional "20% Prompt Pay Discount" offers.
+- **Phase 5: Presentation Layer (Realism)**:
+    - **Real QR Codes**: Generates functional payment QR codes.
+    - **Dynamic Layouts**: Supports distinct modes for Facility Statements, Professional Statements, UB-04, and CMS-1500.
 
-### 2. Forensic Auditing Engine ("The 10 Guardians - V2.4")
-The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculation anchors.
+### 2. Forensic Auditing Engine ("The 10 Guardians")
+The Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculation anchors.
 
 1.  **🧮 Math Guardian**: Deterministic JS Summation. Checks for $0.05 line discrepancies and poisoned subtotals.
 2.  **⚖️ Judge (Meta-Audit)**: Evaluates "Scenario Fidelity". If a bill claims to have a Math Error but the Math Guardian passes, the Judge flags a "Logic Gap".
@@ -71,27 +72,27 @@ The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculat
 
 ---
 
-## 🧪 Forensic Accuracy Standards (V2.4)
+## 🧪 Forensic Accuracy Standards (v2026.3)
 
-| Component | V2.3 Standard | V2.4 Standard (Current) |
+| Component | Legacy Standard | v2026.3 Capstone Standard |
 | :--- | :--- | :--- |
-| **Math Sabotage** | Bottom-line Mismatch | **Aggregation Trap (Poisoned Subtotal)** |
-| **Math Auditing** | AI Arithmetic (Unreliable) | **Deterministic JS Summation** |
-| **Age Logic** | Variable | **Fiscal-Year Dynamic Subtracting** |
-| **Judge Verdict** | Scenario Based | **Arithmetic Meta-Audit + Hallucination Check** |
-| **Guardians** | AI Prompt-Based | **Hybrid (JS Decision + AI Explanation)** |
+| **Institutional Data** | AI Hallucinations | **Get verified_facilities.json (Real Data)** |
+| **Coding** | Approximate Descriptions | **Official AMA CPT Descriptors** |
+| **Pricing** | Random Multipliers | **50/50 Split (Chargemaster vs FMV)** |
+| **Compliance** | Static Text | **Dynamic NSA/GFE & Prompt Pay Logic** |
+| **Barcodes** | ASCII Art | **Real Code128/QR via API** |
 
 ---
 
 ## 📂 Project Structure
 - `/client`: React (Vite) Frontend.
 - `/server.js`: The Multi-Agent Orchestrator and Infiltrator logic.
+- `/server/data`:
+    - `verified_facilities.json`: Single Source of Truth for facility data.
+    - `standard_nomenclature.json`: Official CPT/HCPCS lookup.
 - `/guardians`: The 10 specialized forensic audit modules.
     - `orchestrator.js`: Parallel execution engine.
-    - `math.js`, `upcoding.js`, etc.: Individual guardian logic.
 - `/tests`: Unit testing suite for guardians (`test_guardians.js`).
-- `generate-classification-tests.mjs`: Generator for OCR training fixtures (EOB, MSN, etc.).
-- `generate-error-detection-bills.mjs`: Generator for batch error testing.
 
 ---
 
@@ -100,8 +101,4 @@ Prices are generated using the formula: $P_{billed} = P_{MPFS} \times Payer\_Mul
 - **Payer Multipliers**:
     - **Medicare**: 1.0x
     - **Commercial**: 2.0x
-    - **Self-Pay**: 2.5x
-- **Modifier Adjustments**:
-    - `-26` (Professional): 40% of standard rate.
-    - `-TC` (Technical): 60% of standard rate.
-    - `-50` (Bilateral): 150% of standard rate.
+    - **Self-Pay**: **Bifurcated Logic** (50% chance of 2.5x Gross Charges / 50% chance of 1.5x FMV).
