@@ -71,13 +71,30 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
 
     const createBillObject = (items, total, providerName, isPro = false) => {
         const admin = coding.admin || {};
+
+        // --- PHASE 9: EXPERT REALISM LOGIC ---
+        // 1. Adaptive Adjustment Naming
+        const adjLabel = payerType === 'Self-Pay' ? 'Uninsured Discount' : 'Contractual Adjustment';
+
+        // 2. Financial Metrics
+        const subtotal = total;
+        const adjAmount = financial.appliedPricingMode === 'AGB' ? (subtotal * 0.45).toFixed(2) : 0.00;
+        const grandTotal = financial.appliedPricingMode === 'AGB' ? (subtotal * 0.55).toFixed(2) : subtotal;
+
+        // 3. Expert Identifiers
+        const tob = isPro ? "1500" : (admin.tob || "131");
+        const billType = isPro ? "CMS-1500" : (tob === "111" ? "0111 (Inpatient)" : "0131 (OP Hospital)");
+        const fcCode = payerType === 'Self-Pay' ? "FC: 01" : "FC: 05"; // Simplified FC mapping
+
         return {
             bill_data: {
                 provider: {
                     name: providerName,
                     address: isPro ? `${facility.city}, ${facility.state} ${facility.zip}` : `${facility.address}, ${facility.city}, ${facility.state} ${facility.zip}`,
                     contact: facility.phone || "800-444-1234",
-                    domain: facility.domain || "healthcare.org"
+                    domain: facility.domain || "healthcare.org",
+                    // Phase 9: Service Location
+                    serviceLocation: isPro ? "Physician's Office" : facility.name
                 },
                 npi: isPro ? generateLuhnPaddedNPI() : facility.npi,
                 taxId: isPro ? generateRandomEIN() : facility.taxId,
@@ -89,6 +106,8 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                     state: clinical.patient.state,
                     zip: clinical.patient.zip,
                 },
+                // Phase 9: Guarantor (Default to Patient for realism)
+                guarantor: clinical.patient.name,
                 patientId: sharedMRN,
                 accountNumber: "AC-" + Math.floor(Math.random() * 9000000 + 1000000),
                 encounter: {
@@ -97,31 +116,39 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                     type: admin.admission_type || "1",
                     source: admin.admission_source || "7",
                     status: admin.discharge_status || "01",
-                    tob: isPro ? "1500" : (admin.tob || "131")
+                    tob: tob,
+                    billType: billType,
+                    claimNumber: "CLN-" + Math.floor(Math.random() * 9000000 + 1000000),
+                    drg: admin.tob === "111" ? "DRG-190" : null, // Static realistic DRG for Inpatient
+                    fcCode: fcCode
                 },
                 statementDate: statementDateStr,
                 statementId: "ST-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
                 dueDate: "Upon Receipt",
-                // DX suppression for statements (Phase 4)
                 icd10: coding.icd_codes.map(icd => `${icd.code} - ${icd.description}`).join(', '),
                 insurance: insuranceName,
-                insuranceStatus: "", // Removed "Active" placeholder
+                insuranceStatus: "",
                 notes: faStatus,
-                lineItems: formatLineItems(items),
-                subtotal: total,
-                adjustments: financial.appliedPricingMode === 'AGB' ? (total * 0.45).toFixed(2) : 0.00, // Show 45% discount if AGB
+                lineItems: formatLineItems(items).map(item => ({
+                    ...item,
+                    cdm: "CDM-" + Math.floor(Math.random() * 900000 + 100000) // Phase 9: CDM Numbers
+                })),
+                subtotal: subtotal,
+                adjustmentsBreakdown: (adjAmount > 0) ? [{ label: adjLabel, amount: adjAmount }] : [],
+                adjustments: adjAmount,
                 insPaid: 0.00,
-                grandTotal: financial.appliedPricingMode === 'AGB' ? (total * 0.55).toFixed(2) : total,
-                // STRUCTURAL ADDITIONS (PHASE 6 REMEDIATION)
+                grandTotal: grandTotal,
                 header: {
                     admitDate: clinical.encounter.date_of_service,
                     dischargeDate: clinical.encounter.date_of_service,
                     patientType: admin.admission_type === '1' ? 'Emergency' : 'Outpatient',
                     financialClass: payerType,
+                    fcCode: fcCode
                 },
                 footer: {
                     aging: {
-                        current: total,
+                        // Phase 9: Aging Bucket reflects BALANCE, not Charges
+                        current: grandTotal,
                         days30: 0.00,
                         days60: 0.00,
                         days90: 0.00,

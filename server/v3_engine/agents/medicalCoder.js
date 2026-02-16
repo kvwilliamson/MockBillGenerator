@@ -129,18 +129,31 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
       throw new Error("Invalid structure returned by Coder");
     }
 
-    // --- CRITICAL CONSTRAINT ENFORCEMENT: MODIFIERS ---
+    // --- CRITICAL CONSTRAINT ENFORCEMENT: MODIFIERS & REV CODE REFINEMENT ---
     if (aiData.facility_codes) {
-      // Enforce -TC on Facility E/M and Shared Items
       aiData.facility_codes.forEach(code => {
-        if ((code.code.startsWith('99') || code.code.startsWith('7') || code.code.startsWith('93')) && !code.code.includes('-')) {
+        const cpt = code.code || '';
+        
+        // 1. Enforce -TC on Facility E/M and Shared Items
+        if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-TC';
+        }
+
+        // 2. Granularize Lab Revenue Codes (V2026.4 Expert Realism)
+        // 0301: Chemistry, 0305: Hematology, 0310: Pathology
+        if (cpt.startsWith('8')) {
+          const num = parseInt(cpt.substring(0, 5));
+          if (num >= 80000 && num <= 84999) code.rev_code = "0301";
+          else if (num >= 85000 && num <= 85999) code.rev_code = "0305";
+          else if (num >= 88300 && num <= 88399) code.rev_code = "0310";
+          else if (!code.rev_code) code.rev_code = "0300";
         }
       });
 
-      // Enforce -26 on Professional E/M and Shared Items
+      // 3. Enforce -26 on Professional E/M and Shared Items
       aiData.professional_codes.forEach(code => {
-        if ((code.code.startsWith('99') || code.code.startsWith('7') || code.code.startsWith('93')) && !code.code.includes('-')) {
+        const cpt = code.code || '';
+        if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-26';
         }
       });
