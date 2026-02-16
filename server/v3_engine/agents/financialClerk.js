@@ -15,34 +15,16 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         **INPUT CODES**:
         ${JSON.stringify(codedServices)}
         
-        **PRICING RULES**:
-        1.  **Facility Fee Pricing (Chargemaster)**:
-            -   **E/M Codes (99xxx)**: $2,000 - $5,000 (ER Room Fee).
-            -   **Labs/Nursing**: High markup (5x-10x).
-            -   **Technical Components (-TC)**: Price at ~80% of Global Fee. (e.g. CT Scan Global $4000 -> TC $3200).
-            -   **ENTROPY**: Add random cents (e.g. $485.25).
+        **PRICING RULES (DETERMINISTIC)**:
+        1.  **Pricing is Automatic**: Do not worry about the exact dollar amounts; a deterministic engine will override your prices using Medicare rates * Multipliers.
+        2.  **Revenue Code Mapping (CRITICAL)**:
+           - Laboratory (8xxxx): **0300**
+           - Radiology (7xxxx): **0320** / **0350** / **0610**
+           - Pharmacy (Jxxxx): **0250** / **0636**
+           - IV Infusion (963xx): **0260**
+           - ER/Clinic E/M: **0450** (ER) / **0510** (Clinic)
             
-        2.  **Professional Fee Pricing (Doctor's Bill)**:
-            -   **E/M Codes (99xxx)**: $200 - $600 (Doctor's Time).
-            -   **Professional Components (-26)**: Price at ~20% of Global Fee. (e.g. CT Scan Global $4000 -> 26 $800).
-            -   **Surgical**: Standard surgeon fees.
-           
-        3. **Rev Codes**:
-           - **Laboratory (8xxxx)**: ALWAYS use **0300** (General) or **0301**. NEVER use 0450 for labs.
-           - **Radiology (7xxxx)**: ALWAYS use **0320** (X-Ray), **0350** (CT), or **0610** (MRI).
-           - **Pharmacy/Meds (Jxxxx)**: ALWAYS use **0250** (Gen Pharm) or **0636** (Drugs requiring detailed coding).
-           - **IV Infusion (963xx)**: ALWAYS use **0260** (IV Therapy).
-           - **E/M Codes (99xxx)**: THESE are the only codes mapped to the Setting:
-             - ER Visit: **0450**
-             - Clinic Visit: **0510**
-             - Urgent Care: **0456**
-           
-        4. **PAYER LOGIC**: 
-           - **IF Payer is 'Self-Pay'**: 
-             * Adjustment = $0.00. (CRITICAL: Show NO discounts).
-             * Patient Responsibility = Total Charge. 
-           - **IF Payer is 'Commercial'**: 
-             * Adjustment = 30-50% of Total Charge.
+        3. **ENTROPY**: You may still provide "realistic" unit prices as a baseline, but know they will be sanitized.
            
         **RETURN JSON**:
         {

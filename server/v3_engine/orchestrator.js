@@ -10,6 +10,7 @@ import { generateReviewer } from './agents/reviewer.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const canonicalInstructions = require('../data/canonical_instructions.json');
+import { fetchMedicareRate, calculateBilledPrice } from '../pricing_core.js';
 
 /**
  * V3 ENGINE ORCHESTRATOR
@@ -33,8 +34,37 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
         // PHASE 3: Medical Coder
         const codingResult = await generateMedicalCoder(genAI_Model, clinicalTruth, scenario);
 
-        // PHASE 4: Financial Clerk
+        // PHASE 4: Financial Clerk (AI selects codes and revenue codes)
         const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData, payerType);
+
+        // --- PHASE 4.5: Deterministic Pricing Hardening ---
+        console.log('[Phase 4.5] Hardening Prices (Deterministic)...');
+        const hardenItems = async (items) => {
+            if (!items) return [];
+            return await Promise.all(items.map(async (item) => {
+                const medicareRate = await fetchMedicareRate(genAI_Model, item.code, item.description);
+                const modifiers = String(item.code).split('-').slice(1);
+                const cityZip = `${facilityData.city} ${facilityData.zip}`;
+                const hardenedPrice = calculateBilledPrice(medicareRate, payerType, facilityData.state, cityZip, modifiers);
+
+                return {
+                    ...item,
+                    unit_price: hardenedPrice,
+                    total_charge: parseFloat((hardenedPrice * (item.quantity || 1)).toFixed(2))
+                };
+            }));
+        };
+
+        if (financialResult.type === 'SPLIT') {
+            financialResult.facility.line_items = await hardenItems(financialResult.facility.line_items);
+            financialResult.facility.total = financialResult.facility.line_items.reduce((s, i) => s + i.total_charge, 0);
+
+            financialResult.professional.line_items = await hardenItems(financialResult.professional.line_items);
+            financialResult.professional.total = financialResult.professional.line_items.reduce((s, i) => s + i.total_charge, 0);
+        } else {
+            financialResult.line_items = await hardenItems(financialResult.line_items);
+            financialResult.total_billed = financialResult.line_items.reduce((s, i) => s + i.total_charge, 0);
+        }
 
         // PHASE 5: Publisher
         let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType);

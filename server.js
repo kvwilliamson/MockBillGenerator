@@ -9,6 +9,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { runDeepDiveAudit } from './guardians/orchestrator.js';
+import {
+    STATE_Z_FACTORS,
+    PAYER_MULTIPLIERS,
+    isMajorMetro,
+    fetchMedicareRate,
+    calculateBilledPrice,
+    getBasePrice
+} from './server/pricing_core.js';
+
 
 // Load local ENV
 dotenv.config();
@@ -53,70 +62,7 @@ const MODEL_NAME = process.env.AI_MODEL_DEEP_ANALYSIS || 'gemini-1.5-flash';
 
 console.log(`[Server] Using AI Model: ${MODEL_NAME}`);
 
-// --- HELPERS: Pricing & Coding Baselines ---
-
-/**
- * Static "Ideal" Medicare rates or work-baselines for common codes.
- * Used for sanity checking AI lookups and providing fallbacks.
- */
-function getBasePrice(cpt) {
-    const code = String(cpt);
-    // E/M (Emergency Dept)
-    if (code.startsWith('99285')) return 380;
-    if (code.startsWith('99284')) return 230;
-    if (code.startsWith('99283')) return 150;
-    if (code.startsWith('99282')) return 80;
-    if (code.startsWith('99281')) return 40;
-
-    // E/M (Office/Clinic)
-    if (code.startsWith('99215')) return 185;
-    if (code.startsWith('99214')) return 130;
-    if (code.startsWith('99213')) return 95;
-    if (code.startsWith('99212')) return 65;
-    if (code.startsWith('99205')) return 220;
-    if (code.startsWith('99204')) return 170;
-
-    // Radiology
-    if (code.startsWith('741')) return 280; // CT Abdomen
-    if (code.startsWith('71046')) return 35; // CXR 2 view
-    if (code.startsWith('71045')) return 32; // CXR 1 view
-    if (code.startsWith('73610')) return 36; // Ankle X-ray
-    if (code.startsWith('73630')) return 40; // Foot X-ray
-    if (code.startsWith('7')) return 45;    // Default Rads
-
-    // Lab
-    if (code.startsWith('87081')) return 18.74; // Throat Culture (Specific BKM from audit)
-    if (code.startsWith('87')) return 20;    // Rapid Tests
-    if (code.startsWith('85025')) return 12; // CBC
-    if (code.startsWith('80053')) return 15; // CMP
-    if (code.startsWith('8100')) return 8;   // Urinalysis
-    if (code.startsWith('86592')) return 22; // Strep
-    if (code.startsWith('8')) return 15;     // Default Lab
-
-    // Procedures
-    if (code.startsWith('131')) return 180; // Complex Repair
-    if (code.startsWith('12011')) return 43; // Simple Repair
-    if (code.startsWith('9637')) return 35; // Injection Service
-    if (code.startsWith('1')) return 50;    // Default Proc
-
-    // Cardiology
-    if (code.startsWith('93000')) return 45; // ECG
-
-    // Lab Handling
-    if (code.startsWith('9900')) return 15; // Specimen Handling
-
-    // Medications / Misc
-    if (code.startsWith('J') || code.startsWith('90')) {
-        const isExpensive = code.startsWith('J9') || code.startsWith('J08') || code.startsWith('J3');
-        if (isExpensive) return 120 + (Math.random() * 200);
-        return 8 + (Math.random() * 15); // Generic Med Base ($8-$23)
-    }
-    if (code === '0250') return 15; // Generic Oral Med
-    if (code === '99000') return 9; // Handling Fee
-
-    // Default catch-all (Randomized to prevent bizarre identical rows)
-    return 45 + (Math.random() * 80);
-}
+// --- HELPERS: Pricing & Coding Baselines (MIGRATED TO pricing_core.js) ---
 
 import { generateV3Bill } from './server/v3_engine/orchestrator.js';
 
@@ -1098,127 +1044,28 @@ async function generateMedicalCoder(clinicalTruth, specialty, errorType) {
 
 // --- HELPERS: Pricing & Coding Baselines ---
 
-// Z-Factor Mapping: State Code to Multiplier (2026 GAF Averages)
-const STATE_Z_FACTORS = {
-    'AL': 0.91, 'AK': 1.27, 'AZ': 0.99, 'AR': 0.89, 'CA': 1.14,
-    'CO': 1.03, 'CT': 1.08, 'DE': 1.02, 'FL': 0.98, 'GA': 0.96,
-    'HI': 1.11, 'ID': 0.93, 'IL': 1.02, 'IN': 0.92, 'IA': 0.90,
-    'KS': 0.91, 'KY': 0.91, 'LA': 0.93, 'ME': 0.96, 'MD': 1.08,
-    'MA': 1.12, 'MI': 0.97, 'MN': 1.02, 'MS': 0.91, 'MO': 0.93,
-    'MT': 0.92, 'NE': 0.91, 'NV': 1.01, 'NH': 1.02, 'NJ': 1.11,
-    'NM': 0.94, 'NY': 1.12, 'NC': 0.96, 'ND': 0.93, 'OH': 0.94,
-    'OK': 0.90, 'OR': 1.03, 'PA': 0.99, 'RI': 1.04, 'SC': 0.93,
-    'SD': 0.90, 'TN': 0.92, 'TX': 0.98, 'UT': 0.96, 'VT': 0.95,
-    'VA': 1.01, 'WA': 1.06, 'WV': 0.90, 'WI': 0.96, 'WY': 0.95,
-    'DC': 1.15
-};
+// --- SHARED PRICING CORE (MIGRATED TO pricing_core.js) ---
 
-const PAYER_MULTIPLIERS = {
-    'Medicare': 1.0,
-    'Insured': 2.5,
-    'Uninsured': 4.0
-};
-
-// X-Factor: Global Flagging Threshold (50% over Pest)
-const FLAGGING_THRESHOLD = 0.50;
-
-/**
- * Urban/Rural Buffer Logic: Check if zip/city is a Major Metro
- */
-/**
- * Urban/Rural Buffer Logic: Scans any text (City, Zip, or Full Address) for Major Metro markers.
- */
-const isMajorMetro = (text) => {
-    if (!text || typeof text !== 'string') return false;
-    const metros = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Francisco', 'Miami'];
-    const zipPrefixes = ['100', '101', '102', '606', '900', '901', '902', '770', '850', '191', '782', '921', '752', '941', '331'];
-
-    const hasMetroName = metros.some(m => text.includes(m));
-    const hasMetroZip = zipPrefixes.some(z => new RegExp(`\\b${z}\\d{2,5}\\b`).test(text));
-
-    return hasMetroName || hasMetroZip;
-};
-
-
-// --- SHARED PRICING CORE (BULLETPROOF SYNCHRONIZATION) ---
-const MEDICARE_CACHE = new Map();
-
-/**
- * The single source of truth for Medicare rates.
- */
-async function fetchMedicareRate(code, desc) {
-    const baseCode = String(code).split('-')[0];
-    if (MEDICARE_CACHE.has(baseCode)) return MEDICARE_CACHE.get(baseCode);
-
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-
-    const prompt = `
-        You are "The Medicare Rate Lookup Agent".
-        Your task is to look up the current CMS Medicare Physician Fee Schedule (MPFS) National Average reimbursement rate for this specific service.
-        
-        **SERVICE**: CPT/HCPCS Code "${code}" - "${desc}"
-        
-        **INSTRUCTIONS**:
-        1. Return the current CMS Medicare national average reimbursement rate.
-        2. Return ONLY the numeric value.
-        
-        **RETURN JSON**:
-        {
-            "medicareRate": Number
-        }
-    `;
-
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        const data = parseAndValidateJSON(text);
-        const rate = Number(data.medicareRate);
-        MEDICARE_CACHE.set(code, rate);
-        return rate;
-    } catch (e) {
-        console.warn(`[Medicare Lookup] Failed for ${code}, falling back to baseline.`);
-        return getBasePrice(code);
-    }
-}
 
 // 3. THE FINANCIAL CLERK ("The Payer Persona")
 async function generateItemPrice(item, payerType, facility) {
     try {
-        const medicareRate = await fetchMedicareRate(item.code, item.desc);
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+        const medicareRate = await fetchMedicareRate(model, item.code, item.desc);
 
-        // --- MODIFIER PRICING LOGIC (V2.3) ---
-        let modMultiplier = 1.0;
         const modifiers = String(item.code).split('-').slice(1);
-        if (modifiers.includes('26')) modMultiplier *= 0.40; // Pro component
-        if (modifiers.includes('TC')) modMultiplier *= 0.60; // Tech component
-        if (modifiers.includes('50')) modMultiplier *= 1.50; // Bilateral
+        const cityZip = `${facility.city} ${facility.zip}`;
+        const pEst = calculateBilledPrice(medicareRate, payerType, facility.state, cityZip, modifiers);
 
-        // --- THE ESTIMATED PRICE ENGINE (P_est = P_med * Y * Z * Mod) ---
-        // 1. Y (Payer Multiplier)
-        let y = PAYER_MULTIPLIERS.Insured;
-        if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
-        else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
-
-        // 2. Z (Geographically Multiplier)
-        const state = facility.state || 'US';
-        let z = STATE_Z_FACTORS[state] || 1.0;
-
-        // 3. Urban Buffer (+0.10 override)
-        if (isMajorMetro(`${facility.city} ${facility.zip}`)) {
-            z += 0.10;
-        }
-
-        const pEst = parseFloat((medicareRate * y * z * modMultiplier).toFixed(2));
-        console.log(`[Price Engine] ${item.code}: Med=$${medicareRate}, Y=${y}, Z=${z.toFixed(2)}, Mod=${modMultiplier}, P_est=$${pEst}`);
-
-        return { medicare: medicareRate, price: pEst, y, z };
+        console.log(`[Price Engine] ${item.code}: Med=$${medicareRate}, P_est=$${pEst}`);
+        return { medicare: medicareRate, price: pEst, z: STATE_Z_FACTORS[facility.state] || 1.0 };
     } catch (e) {
         console.warn(`[Price Engine] Logic failure for ${item.code}, reverting to fallback.`);
         const baseCode = String(item.code).split('-')[0];
         const pMedFallback = getBasePrice(baseCode);
-        let y = PAYER_MULTIPLIERS.Insured;
+        let y = PAYER_MULTIPLIERS.Commercial;
         if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
-        else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
+        else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS["Self-Pay"];
 
         const pEstFallback = parseFloat((pMedFallback * y * 1.0).toFixed(2));
         return { medicare: pMedFallback, price: pEstFallback, y, z: 1.0 };
@@ -1235,9 +1082,9 @@ async function generateFinancialClerk(codingTruth, payerType, errorType = 'CLEAN
 
     // 2. THE PRICING SABOTAGE LOGIC
     // Medicare=1.0, Insured=2.5, Self-Pay=4.0
-    let y = 2.5;
+    let y = 2.0;
     if (isMedicare) y = 1.0;
-    else if (isSelfPay) y = 4.0;
+    else if (isSelfPay) y = 2.5;
 
     // Boost to 5.5x for CMS_BENCHMARK to guarantee a Policy Violation flag (>5.0x threshold)
     if (isPriceGouging) y = 5.5;
@@ -1554,27 +1401,17 @@ async function generatePolishAgent(clinicalTruth, codingTruth, financialData, pa
 // --- AGENT 8: THE PRICING ACTUARY (Compliance & Benchmark Anchor) ---
 async function getPricingBenchmarks(lineItems, payerType, providerInfo) {
     try {
-        // ONE-BY-ONE SYNCHRONIZATION: Call the exact same shared function as the generator
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
         return await Promise.all(lineItems.map(async (item) => {
-            const pMed = await fetchMedicareRate(item.code, item.description);
+            const pMed = await fetchMedicareRate(model, item.code, item.description);
 
-            // 1. Y Scalar
-            let y = PAYER_MULTIPLIERS.Insured;
-            if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
-            else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS.Uninsured;
-
-            // 2. Z Scalar (Identify state from provider address)
+            // 1. Calculate Estimated Fair Price (Deterministic Core)
             const address = providerInfo.address || "";
             const stateMatch = address.match(/\b([A-Z]{2})\b\s+\d{5}/);
             const state = stateMatch ? stateMatch[1] : 'US';
-            let z = STATE_Z_FACTORS[state] || 1.0;
+            const cityZip = address; // isMajorMetro handles parsing
 
-            // 3. Urban Buffer - Scan full address context
-            if (isMajorMetro(address)) {
-                z += 0.10;
-            }
-
-            const pEst = parseFloat((pMed * y * z).toFixed(2));
+            const pEst = calculateBilledPrice(pMed, payerType, state, cityZip);
 
             return {
                 code: item.code,
@@ -1582,8 +1419,8 @@ async function getPricingBenchmarks(lineItems, payerType, providerInfo) {
                 billed_price: item.unitPrice,
                 medicare_rate: pMed,
                 estimated_fair_price: pEst,
-                flagging_threshold: parseFloat((pEst * (1 + FLAGGING_THRESHOLD)).toFixed(2)),
-                status: item.unitPrice > (pEst * (1 + FLAGGING_THRESHOLD)) ? "EXCESSIVE" : "FAIR"
+                flagging_threshold: parseFloat((pEst * (1 + (typeof FLAGGING_THRESHOLD !== 'undefined' ? FLAGGING_THRESHOLD : 0.50))).toFixed(2)),
+                status: item.unitPrice > (pEst * (1 + (typeof FLAGGING_THRESHOLD !== 'undefined' ? FLAGGING_THRESHOLD : 0.50))) ? "EXCESSIVE" : "FAIR"
             };
         }));
     } catch (e) {
@@ -1837,13 +1674,13 @@ app.post('/generate-data-v2', async (req, res) => {
 // --- V3 ENDPOINT (CANONICAL BILLS) ---
 app.post('/generate-data-v3', async (req, res) => {
     try {
-        const { scenarioId } = req.body;
-        console.log(`[V3 Request] Generating Scenario ID: ${scenarioId}`);
+        const { scenarioId, payerType } = req.body;
+        console.log(`[V3 Request] Generating Scenario ID: ${scenarioId} | Payer: ${payerType}`);
 
         // Pass the initialized genAI model to the orchestrator
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-        const v3Result = await generateV3Bill(model, scenarioId);
+        const v3Result = await generateV3Bill(model, scenarioId, payerType);
         res.json(v3Result);
     } catch (error) {
         console.error('[V3 Error]', error);

@@ -13,8 +13,8 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
 
     if (billData.mode === 'SPLIT') {
         // COMBINED REVIEW FOR SPLIT BILL
-        const facItems = billData.facilityBill.bill_data.lineItems.map(s => `[FACILITY] ${s.code}: ${s.desc} ($${s.total})`).join('\n');
-        const proItems = billData.professionalBill.bill_data.lineItems.map(s => `[PROFESSIONAL] ${s.code}: ${s.desc} ($${s.total})`).join('\n');
+        const facItems = billData.facilityBill.bill_data.lineItems.map(s => `[FACILITY] ${s.code}: ${s.description} ($${s.total})`).join('\n');
+        const proItems = billData.professionalBill.bill_data.lineItems.map(s => `[PROFESSIONAL] ${s.code}: ${s.description} ($${s.total})`).join('\n');
 
         reviewContext = `
         **COMBINED SPLIT BILL**:

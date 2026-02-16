@@ -1,12 +1,4 @@
-
-const PAYER_MULTIPLIERS = {
-    'Medicare': 1.0,
-    'Commercial': 2.0,
-    'Self-Pay': 2.5,
-    'High-Deductible': 2.0,
-    'Medicaid': 1.0,
-    'Tricare': 1.0
-};
+import { PAYER_MULTIPLIERS } from '../server/pricing_core.js';
 
 export async function auditPrice(billData, actuaryData, model) {
     const payerType = billData.payerType || 'Commercial';

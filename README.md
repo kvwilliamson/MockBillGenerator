@@ -97,6 +97,10 @@ The V2.4 Auditor uses a **Zero-Trust Parallel Loop** with deterministic calculat
 
 ## ⚖️ Pricing Methodology
 Prices are generated using the formula: $P_{billed} = P_{MPFS} \times Payer\_Multiplier \times Geo\_Factor$.
+- **Payer Multipliers**:
+    - **Medicare**: 1.0x
+    - **Commercial**: 2.0x
+    - **Self-Pay**: 2.5x
 - **Modifier Adjustments**:
     - `-26` (Professional): 40% of standard rate.
     - `-TC` (Technical): 60% of standard rate.
