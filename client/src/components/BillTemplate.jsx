@@ -131,14 +131,23 @@ export const BillTemplate = ({ data }) => {
                     {/* Only show Admit/Disch for Inpatient or if dates differ significantly. 
                         For Clinic/Office (Rev 0510, Single Day), we just show Date of Service or suppress. 
                         Let's suppress if admissionDate == dischargeDate to look more like a clinic statement */}
-                    {admissionDate !== dischargeDate ? (
-                        <div>
-                            <strong>{data.labels?.dos || 'DATE OF SERVICE'}:</strong> {admissionDate} {data.admissionTime && <span style={{ fontSize: '10px' }}>({data.admissionTime})</span>} &mdash;
-                            <strong> DISCH:</strong> {dischargeDate} {data.dischargeTime && <span style={{ fontSize: '10px' }}>({data.dischargeTime})</span>}
-                        </div>
-                    ) : (
-                        <div>
-                            <strong>{data.labels?.dos || 'DATE OF SERVICE'}:</strong> {admissionDate}
+                    {/* Structural Header Data */}
+                    {data.header && (
+                        <>
+                            <div><strong>Admit Date:</strong> {data.header.admitDate || admissionDate}</div>
+                            <div><strong>Discharge Date:</strong> {data.header.dischargeDate || dischargeDate}</div>
+                            <div><strong>Patient Type:</strong> {data.header.patientType || "Outpatient"}</div>
+                            <div><strong>Financial Class:</strong> {data.header.financialClass || "Self-Pay"}</div>
+                        </>
+                    )}
+
+                    {/* Only show Diagnosis if NOT suppressed (i.e. Claim Mode) 
+                        Default to HIDDEN if mode is undefined, or if mode contains 'Statement'
+                    */}
+                    {data.icd10 && data.labels?.mode?.includes('Claim') && (
+                        <div style={{ maxWidth: '400px', marginTop: '5px' }}>
+                            <strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />
+                            {data.icd10.split(', ').map(d => d.includes('-') ? d.split('-')[1].trim() : d).join(', ')}
                         </div>
                     )}
                     {data.attendingPhysician && (
@@ -146,11 +155,13 @@ export const BillTemplate = ({ data }) => {
                             <strong>{data.labels?.attending || 'Attending'}:</strong> {data.attendingPhysician} ({data.labels?.npi || 'NPI'}: {data.attendingNpi})
                         </div>
                     )}
-                    <div style={{ maxWidth: '400px', marginTop: '5px' }}>
-                        <strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />
-                        {/* UI Polish: Show only the description (Hide R07.9) */}
-                        {icd10 ? icd10.split(', ').map(d => d.includes('-') ? d.split('-')[1].trim() : d).join(', ') : ''}
-                    </div>
+                    {data.icd10 && data.labels?.mode?.includes('Claim') && (
+                        <div style={{ maxWidth: '400px', marginTop: '5px' }}>
+                            <strong>{data.labels?.diagnosis || 'DIAGNOSIS (ICD-10)'}:</strong><br />
+                            {/* UI Polish: Show only the description (Hide R07.9) */}
+                            {icd10 ? icd10.split(', ').map(d => d.includes('-') ? d.split('-')[1].trim() : d).join(', ') : ''}
+                        </div>
+                    )}
                     <div><strong>{data.payerLabel || 'INSURANCE'}:</strong> {insurance} {data.insuranceStatus && <span style={{ fontSize: '10px', fontStyle: 'italic' }}>({data.insuranceStatus})</span>}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -249,44 +260,89 @@ export const BillTemplate = ({ data }) => {
                 </table>
             </div>
 
-            {/* Payment Coupon */}
-            <div style={{ marginTop: '40px', border: '2px dashed #999', padding: '20px', pageBreakInside: 'avoid' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <div>
-                        <strong>{data.labels?.coupon || 'Please detach and return with payment'}</strong><br />
-                        {patientName}<br />
-                        Electronic billing statement requested
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
+            {/* Aging Buckets (Structural Addition) */}
+            {data.footer && data.footer.aging && (
+                <div style={{ marginTop: '20px', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
+                    <table style={{ width: '100%', fontSize: '10px', textAlign: 'center', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ background: '#f5f5f5' }}>
+                                <th style={{ border: '1px solid #ddd', padding: '4px' }}>Current</th>
+                                <th style={{ border: '1px solid #ddd', padding: '4px' }}>30-60 Days</th>
+                                <th style={{ border: '1px solid #ddd', padding: '4px' }}>60-90 Days</th>
+                                <th style={{ border: '1px solid #ddd', padding: '4px' }}>90-120 Days</th>
+                                <th style={{ border: '1px solid #ddd', padding: '4px' }}>120+ Days</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style={{ border: '1px solid #ddd', padding: '4px' }}>{formatCurrency(data.footer.aging.current)}</td>
+                                <td style={{ border: '1px solid #ddd', padding: '4px' }}>{formatCurrency(data.footer.aging.days30)}</td>
+                                <td style={{ border: '1px solid #ddd', padding: '4px' }}>{formatCurrency(data.footer.aging.days60)}</td>
+                                <td style={{ border: '1px solid #ddd', padding: '4px' }}>{formatCurrency(data.footer.aging.days90)}</td>
+                                <td style={{ border: '1px solid #ddd', padding: '4px' }}>{formatCurrency(data.footer.aging.days120)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
-                        <div style={{ marginBottom: '10px', fontSize: '20px', fontFamily: 'monospace' }}>
-                            {/* Mock Barcode */}
-                            █║▌│█│║▌║││█║▌║▌║
-                        </div>
-                        {data.labels?.amountEnclosed || 'Amount Enclosed'}: $__________
-                        <div style={{ border: '1px solid #000', height: '30px', width: '150px', marginTop: '5px' }}></div>
+            {/* Payment Coupon with Real QR Code */}
+            <div style={{ marginTop: '40px', border: '2px dashed #999', padding: '20px', pageBreakInside: 'avoid', display: 'flex', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                    <strong>{data.labels?.coupon || 'Please detach and return with payment'}</strong><br />
+                    {patientName}<br />
+                    Electronic billing statement requested
+                    <div style={{ marginTop: '10px', fontSize: '10px' }}>
+                        {accountNumber}<br />
+                        Make checks payable to: <strong>{typeof provider === 'object' && provider.remittance ? provider.remittance.payee : (typeof provider === 'object' ? provider.name : provider)}</strong><br />
+                        {typeof provider === 'object' && provider.remittance ? (
+                            <>
+                                {provider.remittance.address}<br />
+                                {provider.remittance.city}, {provider.remittance.state} {provider.remittance.zip}
+                            </>
+                        ) : (
+                            "See Reverse for Address"
+                        )}
                     </div>
                 </div>
-                <div style={{ fontFamily: 'monospace', fontSize: '24px', textAlign: 'center', marginTop: '15px', letterSpacing: '5px' }}>
-                    || | ||| | || ||| | || | |||
-                </div>
-                <div style={{ textAlign: 'center', fontSize: '10px', marginTop: '5px' }}>
-                    {accountNumber}
+                <div style={{ textAlign: 'right', flex: 1 }}>
+                    <div style={{ marginBottom: '10px' }}>
+                        {data.labels?.amountEnclosed || 'Amount Enclosed'}: $__________
+                        <div style={{ border: '1px solid #000', height: '30px', width: '150px', marginTop: '5px', marginLeft: 'auto' }}></div>
+                    </div>
+                    {/* Real QR Code for Payment Portal */}
+                    <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://${typeof provider === 'object' ? provider.domain : 'healthcare.org'}/pay?acc=${accountNumber}`}
+                        alt="Scan to Pay"
+                        style={{ width: '80px', height: '80px' }}
+                    />
+                    <div style={{ fontSize: '9px', marginTop: '2px' }}>Scan to Pay</div>
                 </div>
             </div>
 
             <div style={{ marginTop: '20px', fontSize: '9px', color: '#666', borderTop: '1px solid #ccc', paddingTop: '10px' }}>
                 <strong>IMPORTANT:</strong> This balance may be subject to collections if unpaid within 90 days. Charges are subject to review and correction.
                 <br />
-                {data.insuranceStatus?.includes('Self-Pay') ? (
-                    <div style={{ background: '#fef3c7', padding: '10px', border: '1px solid #f59e0b', marginTop: '10px', borderRadius: '4px', color: '#92400e' }}>
-                        <strong>{data.labels?.gfe || 'NO SURPRISES ACT PROTECTIONS'}:</strong> As a self-pay patient, you have the right to a Good Faith Estimate. If your total charges exceed your estimate by $400 or more, you may initiate a dispute resolution process.
-                    </div>
-                ) : (
-                    <>
-                        <strong>{data.labels?.assistance || 'FINANCIAL ASSISTANCE'}:</strong> Contact us at 1-800-555-0199 or visit www.mgh-pay.com/assist for a summary of your rights.
-                    </>
-                )}
+                {/* Dynamic Footer Disclaimers (Publisher Driven) */}
+                <div style={{ marginTop: '10px' }}>
+                    {data.labels?.disclaimers?.promptPay && (
+                        <div style={{ background: '#dcfce7', padding: '10px', border: '1px solid #22c55e', marginBottom: '10px', borderRadius: '4px', color: '#166534', fontWeight: 'bold' }}>
+                            {data.labels.disclaimers.promptPay}
+                        </div>
+                    )}
+
+                    {data.labels?.disclaimers?.nsa && (
+                        <div style={{ background: '#fef3c7', padding: '10px', border: '1px solid #f59e0b', marginBottom: '10px', borderRadius: '4px', color: '#92400e' }}>
+                            <strong>NO SURPRISES ACT PROTECTIONS:</strong> {data.labels.disclaimers.nsa}
+                        </div>
+                    )}
+
+                    {data.labels?.disclaimers?.fa && (
+                        <div>
+                            <strong>FINANCIAL ASSISTANCE:</strong> {data.labels.disclaimers.fa}
+                        </div>
+                    )}
+                </div>
                 {data.disclaimers && Array.isArray(data.disclaimers) && (
                     <div style={{ marginTop: '10px', fontWeight: 'bold', color: '#444' }}>
                         {data.disclaimers.map((d, i) => <div key={i} style={{ marginBottom: '4px' }}>• {d}</div>)}

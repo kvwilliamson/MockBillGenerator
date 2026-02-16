@@ -1,0 +1,497 @@
+[
+    {
+        "code": "99213",
+        "description": "Office visit, established, low complexity",
+        "medicareRate": 92.45
+    },
+    {
+        "code": "99214",
+        "description": "Office visit, established, moderate complexity",
+        "medicareRate": 129.80
+    },
+    {
+        "code": "99215",
+        "description": "Office visit, established, high complexity",
+        "medicareRate": 182.35
+    },
+    {
+        "code": "99285",
+        "description": "ER visit, high complexity, life/limb threat",
+        "medicareRate": 382.15
+    },
+    {
+        "code": "99284",
+        "description": "ER visit, high complexity",
+        "medicareRate": 228.40
+    },
+    {
+        "code": "99283",
+        "description": "ER visit, moderate complexity",
+        "medicareRate": 142.10
+    },
+    {
+        "code": "99282",
+        "description": "ER visit, low complexity",
+        "medicareRate": 78.40
+    },
+    {
+        "code": "99203",
+        "description": "Office visit, new, low complexity",
+        "medicareRate": 115.60
+    },
+    {
+        "code": "99204",
+        "description": "Office visit, new, moderate complexity",
+        "medicareRate": 168.45
+    },
+    {
+        "code": "99205",
+        "description": "Office visit, new, high complexity",
+        "medicareRate": 224.70
+    },
+    {
+        "code": "85025",
+        "description": "CBC with automated differential",
+        "medicareRate": 11.20
+    },
+    {
+        "code": "80053",
+        "description": "Comprehensive metabolic panel",
+        "medicareRate": 14.85
+    },
+    {
+        "code": "80048",
+        "description": "Basic metabolic panel",
+        "medicareRate": 11.60
+    },
+    {
+        "code": "81001",
+        "description": "Urinalysis with microscopy",
+        "medicareRate": 8.15
+    },
+    {
+        "code": "84443",
+        "description": "TSH test",
+        "medicareRate": 23.40
+    },
+    {
+        "code": "71045",
+        "description": "Chest x-ray, single",
+        "medicareRate": 32.40
+    },
+    {
+        "code": "71046",
+        "description": "Chest x-ray, 2 views",
+        "medicareRate": 38.60
+    },
+    {
+        "code": "93000",
+        "description": "EKG, routine",
+        "medicareRate": 22.15
+    },
+    {
+        "code": "36415",
+        "description": "Venipuncture",
+        "medicareRate": 3.00
+    },
+    {
+        "code": "96372",
+        "description": "Injection, subcutaneous or IM",
+        "medicareRate": 35.20
+    },
+    {
+        "code": "74177",
+        "description": "CT Abd/Pelvis with contrast",
+        "medicareRate": 285.50
+    },
+    {
+        "code": "70450",
+        "description": "CT Head without contrast",
+        "medicareRate": 180.20
+    },
+    {
+        "code": "72148",
+        "description": "MRI Lumbar without contrast",
+        "medicareRate": 310.40
+    },
+    {
+        "code": "12001",
+        "description": "Simple repair, <2.5 cm",
+        "medicareRate": 125.60
+    },
+    {
+        "code": "12002",
+        "description": "Simple repair, 2.6-7.5 cm",
+        "medicareRate": 165.20
+    },
+    {
+        "code": "G0438",
+        "description": "Annual Wellness Visit, initial",
+        "medicareRate": 175.40
+    },
+    {
+        "code": "G0439",
+        "description": "Annual Wellness Visit, subsequent",
+        "medicareRate": 118.20
+    },
+    {
+        "code": "97110",
+        "description": "Therapeutic exercises",
+        "medicareRate": 42.15
+    },
+    {
+        "code": "97140",
+        "description": "Manual therapy",
+        "medicareRate": 38.40
+    },
+    {
+        "code": "82306",
+        "description": "Vitamin D test",
+        "medicareRate": 40.10
+    },
+    {
+        "code": "80061",
+        "description": "Lipid panel",
+        "medicareRate": 18.20
+    },
+    {
+        "code": "85027",
+        "description": "CBC, automated",
+        "medicareRate": 9.80
+    },
+    {
+        "code": "86038",
+        "description": "Antinuclear antibodies (ANA)",
+        "medicareRate": 25.40
+    },
+    {
+        "code": "86140",
+        "description": "C-reactive protein",
+        "medicareRate": 18.90
+    },
+    {
+        "code": "82728",
+        "description": "Ferritin test",
+        "medicareRate": 21.30
+    },
+    {
+        "code": "J0696",
+        "description": "Ceftriaxone 250mg",
+        "medicareRate": 12.40
+    },
+    {
+        "code": "J1030",
+        "description": "Methylprednisolone 40mg",
+        "medicareRate": 8.90
+    },
+    {
+        "code": "J1885",
+        "description": "Ketorolac tromethamine injection",
+        "medicareRate": 0.65
+    },
+    {
+        "code": "J2405",
+        "description": "Ondansetron injection",
+        "medicareRate": 0.15
+    },
+    {
+        "code": "90686",
+        "description": "Flu vaccine, 4-val, 0.5ml",
+        "medicareRate": 24.50
+    },
+    {
+        "code": "G0008",
+        "description": "Flu vaccine administration",
+        "medicareRate": 32.10
+    },
+    {
+        "code": "73630",
+        "description": "X-ray foot, 3+ views",
+        "medicareRate": 40.20
+    },
+    {
+        "code": "73562",
+        "description": "X-ray knee, 3 views",
+        "medicareRate": 42.10
+    },
+    {
+        "code": "72100",
+        "description": "X-ray spine, lumbosacral",
+        "medicareRate": 45.80
+    },
+    {
+        "code": "74176",
+        "description": "CT Abd/Pelvis without contrast",
+        "medicareRate": 245.20
+    },
+    {
+        "code": "71260",
+        "description": "CT Thorax with contrast",
+        "medicareRate": 210.50
+    },
+    {
+        "code": "70486",
+        "description": "CT Maxillofacial without contrast",
+        "medicareRate": 165.80
+    },
+    {
+        "code": "93306",
+        "description": "Echocardiogram, transthoracic",
+        "medicareRate": 250.40
+    },
+    {
+        "code": "93010",
+        "description": "EKG interpretation",
+        "medicareRate": 8.50
+    },
+    {
+        "code": "45378",
+        "description": "Colonoscopy, diagnostic",
+        "medicareRate": 420.30
+    },
+    {
+        "code": "43239",
+        "description": "EGD with biopsy",
+        "medicareRate": 385.60
+    },
+    {
+        "code": "99211",
+        "description": "Nurse visit",
+        "medicareRate": 25.10
+    },
+    {
+        "code": "99243",
+        "description": "Office consultation, moderate",
+        "medicareRate": 155.20
+    },
+    {
+        "code": "11721",
+        "description": "Debride nails, 6+",
+        "medicareRate": 45.30
+    },
+    {
+        "code": "17000",
+        "description": "Destroy premalignant lesion",
+        "medicareRate": 65.40
+    },
+    {
+        "code": "10060",
+        "description": "Drainage of abscess, simple",
+        "medicareRate": 115.80
+    },
+    {
+        "code": "69210",
+        "description": "Remove ear wax",
+        "medicareRate": 52.40
+    },
+    {
+        "code": "99396",
+        "description": "Preventive visit, established, 40-64",
+        "medicareRate": 145.20
+    },
+    {
+        "code": "99395",
+        "description": "Preventive visit, established, 18-39",
+        "medicareRate": 135.80
+    },
+    {
+        "code": "82043",
+        "description": "Microalbumin, quantitative",
+        "medicareRate": 15.20
+    },
+    {
+        "code": "82565",
+        "description": "Creatinine test",
+        "medicareRate": 7.40
+    },
+    {
+        "code": "83036",
+        "description": "Hemoglobin A1c",
+        "medicareRate": 13.80
+    },
+    {
+        "code": "84439",
+        "description": "Thyroxine, free",
+        "medicareRate": 12.50
+    },
+    {
+        "code": "85610",
+        "description": "Prothrombin time",
+        "medicareRate": 5.40
+    },
+    {
+        "code": "J1100",
+        "description": "Dexamethasone injection 1mg",
+        "medicareRate": 0.12
+    },
+    {
+        "code": "A0428",
+        "description": "Ambulance, BLS, non-emergency",
+        "medicareRate": 250.00
+    },
+    {
+        "code": "A0425",
+        "description": "Ambulance mileage",
+        "medicareRate": 8.50
+    },
+    {
+        "code": "E0114",
+        "description": "Crutches, aluminum",
+        "medicareRate": 45.20
+    },
+    {
+        "code": "E1390",
+        "description": "Oxygen concentrator",
+        "medicareRate": 180.00
+    },
+    {
+        "code": "92004",
+        "description": "Eye exam, new patient",
+        "medicareRate": 155.40
+    },
+    {
+        "code": "92014",
+        "description": "Eye exam, established patient",
+        "medicareRate": 135.20
+    },
+    {
+        "code": "90834",
+        "description": "Psychotherapy, 45 minutes",
+        "medicareRate": 110.50
+    },
+    {
+        "code": "90837",
+        "description": "Psychotherapy, 60 minutes",
+        "medicareRate": 160.80
+    },
+    {
+        "code": "90791",
+        "description": "Psychiatric diagnostic eval",
+        "medicareRate": 185.30
+    },
+    {
+        "code": "96130",
+        "description": "Psych testing eval, first hour",
+        "medicareRate": 125.40
+    },
+    {
+        "code": "99406",
+        "description": "Smoking cessation, 3-10 min",
+        "medicareRate": 15.80
+    },
+    {
+        "code": "00811",
+        "description": "Anesthesia, colonoscopy",
+        "medicareRate": 110.00
+    },
+    {
+        "code": "01967",
+        "description": "Anesthesia, labor/delivery",
+        "medicareRate": 350.00
+    },
+    {
+        "code": "95910",
+        "description": "Nerve conduction, 7-8 studies",
+        "medicareRate": 185.20
+    },
+    {
+        "code": "95810",
+        "description": "Sleep study",
+        "medicareRate": 650.00
+    },
+    {
+        "code": "88305",
+        "description": "Pathology exam, biopsy",
+        "medicareRate": 75.40
+    },
+    {
+        "code": "G0202",
+        "description": "Screening mammography, digital",
+        "medicareRate": 145.00
+    },
+    {
+        "code": "77067",
+        "description": "Screening mammography, 2D",
+        "medicareRate": 142.10
+    },
+    {
+        "code": "Q9967",
+        "description": "Low osmolality contrast, 300-399mg",
+        "medicareRate": 0.18
+    },
+    {
+        "code": "96413",
+        "description": "Chemotherapy, IV infusion",
+        "medicareRate": 155.30
+    },
+    {
+        "code": "96360",
+        "description": "IV hydration, first hour",
+        "medicareRate": 62.40
+    },
+    {
+        "code": "96361",
+        "description": "IV hydration, each addl hour",
+        "medicareRate": 18.20
+    },
+    {
+        "code": "99232",
+        "description": "Subsequent hospital care, moderate",
+        "medicareRate": 75.40
+    },
+    {
+        "code": "99222",
+        "description": "Initial hospital care, moderate",
+        "medicareRate": 142.10
+    },
+    {
+        "code": "99233",
+        "description": "Subsequent hospital care, high",
+        "medicareRate": 110.85
+    },
+    {
+        "code": "99238",
+        "description": "Hospital discharge day mgmt",
+        "medicareRate": 78.40
+    },
+    {
+        "code": "36410",
+        "description": "Venipuncture, age 3+",
+        "medicareRate": 15.20
+    },
+    {
+        "code": "82947",
+        "description": "Glucose quantitative",
+        "medicareRate": 5.40
+    },
+    {
+        "code": "82962",
+        "description": "Glucose blood by device",
+        "medicareRate": 3.20
+    },
+    {
+        "code": "85018",
+        "description": "Hemoglobin",
+        "medicareRate": 3.40
+    },
+    {
+        "code": "85014",
+        "description": "Hematocrit",
+        "medicareRate": 3.40
+    },
+    {
+        "code": "86140",
+        "description": "CRP test",
+        "medicareRate": 18.20
+    },
+    {
+        "code": "87086",
+        "description": "Urine culture",
+        "medicareRate": 11.40
+    },
+    {
+        "code": "87070",
+        "description": "Culture, bacterial, any other source",
+        "medicareRate": 12.50
+    }
+]

@@ -1,10 +1,31 @@
 import { parseAndValidateJSON } from '../utils.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load Standard Nomenclature
+let STANDARD_NOMENCLATURE = [];
+try {
+  const dbPath = path.join(__dirname, '../../data/standard_nomenclature.json');
+  if (fs.existsSync(dbPath)) {
+    STANDARD_NOMENCLATURE = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+  }
+} catch (e) {
+  console.warn("[MedicalCoder] Failed to load nomenclature DB:", e.message);
+}
 
 /**
  * PHASE 3: THE MEDICAL CODER
  * Goal: Apply Codes based on Instructions (Hybrid AI/Constraint)
  */
 export async function generateMedicalCoder(model, clinicalTruth, scenario) {
+  // Inject Nomenclature into Prompt context
+  const nomenclatureContext = STANDARD_NOMENCLATURE.length > 0
+    ? JSON.stringify(STANDARD_NOMENCLATURE.slice(0, 50)) // Passing full list might be too big, pass key examples or rely on post-processing
+    : "[]";
   const prompt = `
         You are "The Medical Coder". Your goal is to assign CPT and ICD codes for a bill.
         
@@ -27,97 +48,71 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
            
            - **BUNDLING RULE (CRITICAL)**: Unless the instructions explicitly say to "Unbundle" or "Explode" a code for the scenario, you must **BUNDLE** standard services according to NCCI edits.
            - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the setting (e.g. 9928x for ER, 9920x/9921x for Clinic, 9922x for Inpatient). NEVER bill multiple E/M codes.
+           - **POST-2023 E/M RULES**: 
+             * **DEPRECATED**: Observation codes 99217, 99218, 99219, 99220 are NO LONGER IN USE. 
+             * For observation/inpatient, use 99221-99223 (Initial) or 99231-99233 (Subsequent).
+             * For Observation stays, you MUST include G0378 (Hourly Observation) with accurate units.
            
         3. **DERIVED SERVICES (AND DENSITY)**: Review the *entire* Clinical Record and assign CPT/HCPCS codes.
-           - **ANCILLARY DENSITY (GRAVITY SCORE)**:
-             * **Analyze the Scenario Intent**: Is this "Clean" or "Upcoding"?
-             * **IF UPCODING (Low Gravity)**: The Goal is to show a mismatch. Generate **ROUTINE/LOW GRAVITY** ancillaries (e.g. basic labs, strep test, urinalysis). Avoid high-tech items like CT/MRI unless strictly necessary.
-             * **IF CLEAN (High Gravity)**: The Bill must justify its high level. Generate **HIGH GRAVITY** ancillaries (e.g. CT Scans, IV Meds, Complex panels).
-             * *Prompt*: "List 3-5 ancillary services for [Diagnosis] that match a [Gravity Score] acuity level."
+           - **ANCILLARY DENSITY (DETERMINISTIC)**:
+             * **HIGH-ACUITY ED (99285)**: MUST include at least 4-6 ancillary services (e.g., CT, multiple labs, IV meds).
+             * **OBSERVATION (G0378)**: MUST include at least 3 supporting diagnostics/services (Rev 0762). NEVER use 99285 for Observation hours.
+             * **INPATIENT ROOM & BOARD**: 
+               - Daily Room & Board (Rev 0110-0120) MUST appear **only** when Patient Type = Inpatient.
+               - Units MUST match the midnight stays (LOS) in the record.
+               - NEVER include inpatient room charges for ED or Observation encounters.
            
-           - **ANCILLARY RESTRAINT**: Only bill for ancillaries explicitly found in the Clinical Record.
+           - **LOGICAL PAIRING (REV CODES)**:
+             * Lab CPTs (8xxxx) -> **0300**
+             * Radiology (7xxxx) -> **0320/0350**
+             * Cardiology/ECG (93xxx) -> **0730**
+             * Pharmacy/J-codes -> **0250**
+             * Observation (G0378) -> **0762**
+             * ER Facility -> **0450**
+             * Clinic Facility -> **0510**
            
-           - **CHARGEMASTER NOISE (BLOAT)**: 
-             * For High-Level visits, add 1-2 "Administrative" line items (e.g. Supplies, Monitoring) to look "Real".
+           - **OFFICIAL DESCRIPTORS**: You MUST use the **Verbatim Official AMA CPT/HCPCS Description**. No paraphrasing or "billing-style" shorthand in the official_description field.
            
-           - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code. 
-             * **CRITICAL UNIT LOGIC**: Look up the "billing unit" for the J-Code. Calculate the quantity based on the dose given.
+            - **CHARGEMASTER NOISE (BLOAT)**: 
+              * For High-Level visits, add 1-2 "Administrative" line items.
+              * **STRICT RULE**: Use **99070** (Supplies) or **HCPCS (Axxxx/Cxxxx)**. NEVER use an E/M code (992xx) for supplies.
            
-           - **FORMATTING RULE**: CPT Codes must be 5-character STRINGS. **NO DECIMALS**. ICD-10 codes DO have decimals.
-           - **Goal**: The bill must accurately reflect the *complexity* of the generated clinical story.
-        4. **DESCRIPTION FORMAT**: YOU MUST GENERATE TWO DESCRIPTIONS PER CODE.
-           - **billing_description**: REAL WORLD CHARGEMASTER STYLE. Short, ALL CAPS, cryptic, max 30 chars.
-           - **official_description**: FULL OFFICIAL AMA CPT DESCRIPTION. Must be exact.
+           - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code with accurate units.
            
-           **EXAMPLES (FOLLOW THESE EXACTLY)**:
-           - 99285:
-             * billing: "HC ED VISIT LVL 5"
-             * official: "Emergency department visit for the evaluation and management of a patient, which requires these 3 key components: A comprehensive history; A comprehensive examination; and Medical decision making of high complexity."
-           - 36415:
-             * billing: "VENIPUNCTURE"
-             * official: "Collection of venous blood by venipuncture"
-           - 85025:
-             * billing: "CBC W/DIFF"
-             * official: "Blood count; complete (CBC), automated (Hgb, Hct, RBC, WBC and platelet count) and automated differential WBC count"
-           - 96360:
-             * billing: "IV INFUSION 1 HR"
-             * official: "Intravenous infusion, hydration; initial, 31 minutes to 1 hour"
-           - J2405:
-             * billing: "ONDANSETRON 1MG"
-             * official: "Injection, ondansetron hydrochloride, per 1 mg"
-           - G0001:
-             * billing: "FLU VACCINE ADMIN"
-             * official: "Administration of influenza virus vaccine for the prophylaxis of influenza disease (this code is to be used for Medicare billing purposes only)"
-
-        5. Even if the instructions imply fraud (e.g., "Upcode to Level 5"), YOU MUST FOLLOW THEM for the main code. You are simulating the error.
-        6. Provide a short "Coding Rationale" for each code.
+            // --- STANDARD NOMENCLATURE VALIDATION (V2026.3 Capstone) ---
+            - **NOMENCLATURE MATCHING**: 
+              * You MUST resolve every CPT/HCPCS code against the official 2026 descriptor.
+              * If a code is in the "Standard Nomenclature" list, use that description EXACTLY.
+              * NO PARAPHRASING. 
+              * Example: 80053 MUST be "COMPREHENSIVE METABOLIC PANEL".
+            
+            - **FORMATTING RULE**: CPT Codes must be 5-character STRINGS. **NO DECIMALS**. ICD-10 codes DO have decimals.
+        
+        4. **ADMINISTRATIVE CODING (CLAIM MODE)**:
+           - **Type of Bill (TOB)**: 131 (OP Hospital), 111 (Inpatient).
+           - **Admission Type**: 1 (Emergency), 2 (Urgent), 3 (Elective).
+           - **Admission Source**: 1 (Non-Healthcare Facility), 7 (ED).
+           - **Discharge Status**: 01 (Home), 03 (SNF).
         
         **RETURN JSON**:
         {
             "icd_codes": [
                 { "code": "R07.9", "description": "Chest pain, unspecified" }
             ],
-            // IF GLOBAL (Clinic):
-            "cpt_codes": [...], 
-            
-        **SPLIT BILLING LOGIC (CRITICAL)**:
-        You must decide which bill each code belongs to.
-        
-        1.  **FACILITY BILL (UB-04) ONLY**:
-            -   **Laboratory (8xxxx)**: ALL routine labs (CBC, BMP, Troponin) are Facility ONLY. Do NOT put these on the Pro bill.
-            -   **Nursing/Admin (3xxxx, 9xxxx)**: Venipuncture (36415), IV Infusion (96360), Vaccines (G0001). Facility ONLY.
-            -   **Facility E/M**: The Room Fee (e.g. 99285).
-            
-        2.  **SHARED ITEMS (Radiology/Cardiology)**:
-            -   **IF YOU ASSIGN A RADIOLOGY (7xxxx) OR CARDIOLOGY CODE**:
-                -   Must appear in **facility_codes** with modifier '-TC'.
-                -   Must appear in **professional_codes** with modifier '-26'.
-            -   **Example**: Chest X-Ray (71045) -> Facility: '71045-TC', Pro: '71045-26'.
-            
-        3.  **PROFESSIONAL BILL (CMS-1500) ONLY**:
-            -   **Professional E/M**: The Doctor's time (e.g. 99285).
-            -   **Surgical Procedures**: Doctor's fee only (e.g. 12001).
-            
-        **EXAMPLE SPLIT**:
-        - CBC (85025) -> Facility: '85025', Pro: [NONE].
-        - X-Ray (71045) -> Facility: '71045-TC', Pro: '71045-26'.
-        - ER Visit -> Facility: '99285', Pro: '99285'.
-        
-        **RETURN JSON**:
-        {
-            "icd_codes": [ ... ],
-            
+            // ADMINISTRATIVE ELEMENTS
+            "admin": {
+                "tob": "131",
+                "admission_type": "1",
+                "admission_source": "7",
+                "discharge_status": "01"
+            },
             // IF SPLIT (Hospital/ER):
             "facility_codes": [
-                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "type": "FACILITY_EM" },
-                 { "code": "85025", "billing_description": "CBC W/DIFF", "type": "LAB" },
-                 { "code": "36415", "billing_description": "VENIPUNCTURE", "type": "NURSING" },
-                 { "code": "71045", "billing_description": "XR CHEST 2 VIEW", "type": "TECH_XRAY" }
+                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "official_description": "...", "type": "FACILITY_EM" },
+                 { "code": "85025", "billing_description": "CBC W/DIFF", "official_description": "...", "type": "LAB" }
             ],
             "professional_codes": [
-                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "type": "PRO_EM" },
-                 { "code": "71045-26", "billing_description": "XR CHEST INTERP", "type": "PRO_READ" }
-                 // NOTE: NO LABS HERE
+                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "official_description": "...", "type": "PRO_EM" }
             ]
         }
     `;

@@ -1,0 +1,90 @@
+[
+    {
+        "code": "99285",
+        "description": "EMERGENCY DEPT VISIT HIGH SEVERITY"
+    },
+    {
+        "code": "99284",
+        "description": "EMERGENCY DEPT VISIT HIGH/MOD SEVERITY"
+    },
+    {
+        "code": "99283",
+        "description": "EMERGENCY DEPT VISIT MODERATE SEVERITY"
+    },
+    {
+        "code": "99282",
+        "description": "EMERGENCY DEPT VISIT LOW/MOD SEVERITY"
+    },
+    {
+        "code": "99281",
+        "description": "EMERGENCY DEPT VISIT LOW SEVERITY"
+    },
+    {
+        "code": "85025",
+        "description": "COMPLETE CBC W/AUTO DIFF WBC"
+    },
+    {
+        "code": "80053",
+        "description": "COMPREHENSIVE METABOLIC PANEL"
+    },
+    {
+        "code": "80048",
+        "description": "BASIC METABOLIC PANEL"
+    },
+    {
+        "code": "84484",
+        "description": "TROPONIN QUANTITATIVE"
+    },
+    {
+        "code": "82465",
+        "description": "CHOLESTEROL SERUM, TOTAL"
+    },
+    {
+        "code": "83498",
+        "description": "TRIGLYCERIDES"
+    },
+    {
+        "code": "93000",
+        "description": "ELECTROCARDIOGRAM COMPLETE"
+    },
+    {
+        "code": "93005",
+        "description": "ELECTROCARDIOGRAM TRACING ONLY"
+    },
+    {
+        "code": "93010",
+        "description": "ELECTROCARDIOGRAM REPORT ONLY"
+    },
+    {
+        "code": "71045",
+        "description": "RADIOLOGIC EXAM CHEST 1 VIEW"
+    },
+    {
+        "code": "71046",
+        "description": "RADIOLOGIC EXAM CHEST 2 VIEWS"
+    },
+    {
+        "code": "99070",
+        "description": "SUPPLIES AND MATERIALS"
+    },
+    {
+        "code": "G0378",
+        "description": "HOSPITAL OBSERVATION PER HR"
+    },
+    {
+        "code": "J0123",
+        "description": "INJECTION GENTAMICIN SULFATE"
+    },
+    {
+        "code": "J1100",
+        "description": "INJECTION DEXAMETHASONE SODIUM PHOS"
+    },
+    {
+        "code": "J2405",
+        "description": "INJECTION ONDANSETRON HCL"
+    },
+    {
+        "code": "A9270",
+        "description": "NON-COVERED ITEM OR SERVICE"
+    }
+]

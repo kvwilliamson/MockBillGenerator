@@ -36,7 +36,11 @@ export async function generateClinicalArchitect(model, scenario, facility) {
             "patient": {
                 "name": "First Last",
                 "dob": "YYYY-MM-DD",
-                "gender": "M/F"
+                "gender": "M/F",
+                "address": "Real Street Address",
+                "city": "Real City",
+                "state": "Real ST",
+                "zip": "XXXXX"
             },
             "encounter": {
                 "date_of_service": "${new Date().toISOString().split('T')[0]}",

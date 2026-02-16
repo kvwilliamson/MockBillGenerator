@@ -69,55 +69,111 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
     // Shared MRN for both Facility and Professional (Patient Identity)
     const sharedMRN = "MRN-" + Math.floor(Math.random() * 9000000 + 1000000);
 
-    const createBillObject = (items, total, providerName, isPro = false) => ({
-        bill_data: {
-            provider: {
-                name: providerName,
-                address: isPro ? "PO BOX 555, PHYSICIAN BILLING SVCS" : `${facility.address}, ${facility.city}, ${facility.state} ${facility.zip}`,
-                contact: "800-555-0199",
-            },
-            npi: isPro ? generateLuhnPaddedNPI() : facility.npi,
-            taxId: isPro ? generateRandomEIN() : facility.taxId,
-            patientName: clinical.patient.name,
-            patientDOB: clinical.patient.dob,
-            patientId: sharedMRN, // Synced MRN
-            accountNumber: "AC-" + Math.floor(Math.random() * 9000000 + 1000000), // Distinct Account #
-            admissionDate: clinical.encounter.date_of_service,
-            dischargeDate: clinical.encounter.date_of_service,
-            statementDate: statementDateStr,
-            statementId: "ST-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
-            dueDate: "Upon Receipt",
-            icd10: coding.icd_codes.map(icd => `${icd.code} - ${icd.description}`).join(', '),
-            insurance: insuranceName,
-            insuranceStatus: "Active",
-            tob: isPro ? "1500" : "131", // CMS-1500 for Pro, UB-04 (131) for Facility
-            notes: faStatus,
-            lineItems: formatLineItems(items),
-            subtotal: total,
-            adjustments: 0.00,
-            insPaid: 0.00,
-            grandTotal: total,
-            labels: {
-                account: "Account #",
-                statementDate: "Statement Date",
-                dueDate: "Payment Due"
+    const createBillObject = (items, total, providerName, isPro = false) => {
+        const admin = coding.admin || {};
+        return {
+            bill_data: {
+                provider: {
+                    name: providerName,
+                    address: isPro ? `${facility.city}, ${facility.state} ${facility.zip}` : `${facility.address}, ${facility.city}, ${facility.state} ${facility.zip}`,
+                    contact: facility.phone || "800-444-1234",
+                    domain: facility.domain || "healthcare.org"
+                },
+                npi: isPro ? generateLuhnPaddedNPI() : facility.npi,
+                taxId: isPro ? generateRandomEIN() : facility.taxId,
+                patient: {
+                    name: clinical.patient.name,
+                    dob: clinical.patient.dob,
+                    address: clinical.patient.address,
+                    city: clinical.patient.city,
+                    state: clinical.patient.state,
+                    zip: clinical.patient.zip,
+                },
+                patientId: sharedMRN,
+                accountNumber: "AC-" + Math.floor(Math.random() * 9000000 + 1000000),
+                encounter: {
+                    admitDate: clinical.encounter.date_of_service,
+                    dischargeDate: clinical.encounter.date_of_service,
+                    type: admin.admission_type || "1",
+                    source: admin.admission_source || "7",
+                    status: admin.discharge_status || "01",
+                    tob: isPro ? "1500" : (admin.tob || "131")
+                },
+                statementDate: statementDateStr,
+                statementId: "ST-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                dueDate: "Upon Receipt",
+                // DX suppression for statements (Phase 4)
+                icd10: coding.icd_codes.map(icd => `${icd.code} - ${icd.description}`).join(', '),
+                insurance: insuranceName,
+                insuranceStatus: "", // Removed "Active" placeholder
+                notes: faStatus,
+                lineItems: formatLineItems(items),
+                subtotal: total,
+                adjustments: financial.appliedPricingMode === 'AGB' ? (total * 0.45).toFixed(2) : 0.00, // Show 45% discount if AGB
+                insPaid: 0.00,
+                grandTotal: financial.appliedPricingMode === 'AGB' ? (total * 0.55).toFixed(2) : total,
+                // STRUCTURAL ADDITIONS (PHASE 6 REMEDIATION)
+                header: {
+                    admitDate: clinical.encounter.date_of_service,
+                    dischargeDate: clinical.encounter.date_of_service,
+                    patientType: admin.admission_type === '1' ? 'Emergency' : 'Outpatient',
+                    financialClass: payerType,
+                },
+                footer: {
+                    aging: {
+                        current: total,
+                        days30: 0.00,
+                        days60: 0.00,
+                        days90: 0.00,
+                        days120: 0.00
+                    },
+                    priorBalance: 0.00,
+                    pageInfo: "Page 1 of 1"
+                },
+                labels: {
+                    mode: isPro ? "Professional Patient Statement" : "Facility Patient Statement",
+                    account: "Account #",
+                    statementDate: "Statement Date",
+                    dueDate: "Payment Due",
+                    disclaimers: {
+                        fa: `Financial Assistance Policy: If you are uninsured or have a high deductible, you may be eligible for a discount under our 501(r) policy. Proof of income and assets is required. Contact ${facility.phone || 'us'} for an application or visit www.${facility.domain || 'hospital.org'}/financial-assist.`,
+                        nsa: payerType === 'Self-Pay' || payerType === 'Uninsured'
+                            ? "No Surprises Act / Good Faith Estimate: You are protected from balance billing for emergency services. If your final bill exceeds your Good Faith Estimate by $400 or more, you may initiate a patient-provider dispute resolution process within 120 days."
+                            : "No Surprises Act: You are protected from balance billing if you receive emergency care from an out-of-network provider or facility. Your cost-sharing is limited to the in-network amount.",
+                        promptPay: payerType === 'Self-Pay'
+                            ? "PROMPT PAY DISCOUNT: Pay this balance in full within 30 days of the Statement Date to receive an additional 20% reduction."
+                            : ""
+                    }
+                },
+                scenarioId: scenario.scenarioId,
+                scenarioName: scenario.scenarioName
             }
-        },
-        scenarioId: scenario.scenarioId,
-        scenarioName: scenario.scenarioName
-    });
+        };
+    };
 
     // OUTPUT GENERATION
+    // Currently, the engine handles SPLIT vs GLOBAL.
+    // We add logic to handle four document modes:
+    // 1. Facility Patient Statement
+    // 2. Professional Patient Statement
+    // 3. UB-04 Claim (Facility)
+    // 4. CMS-1500 Claim (Professional)
+
+    // For now, we remain compatible with the current SPLIT/GLOBAL trigger but refine the output metadata.
     if (financial.type === "SPLIT") {
+        const facBill = createBillObject(financial.facility.line_items, financial.facility.total, facility.name);
+        const proBill = createBillObject(financial.professional.line_items, financial.professional.total, `Emergency Physicians of ${facility.city}`, true);
+
         return {
             mode: "SPLIT",
-            facilityBill: createBillObject(financial.facility.line_items, financial.facility.total, facility.name),
-            professionalBill: createBillObject(financial.professional.line_items, financial.professional.total, `Emergency Physicians of ${facility.city}`, true)
+            facilityBill: facBill,
+            professionalBill: proBill
         };
     } else {
+        const facBill = createBillObject(financial.line_items || [], financial.total_billed, facility.name);
         return {
             mode: "GLOBAL",
-            facilityBill: createBillObject(financial.line_items || [], financial.total_billed, facility.name),
+            facilityBill: facBill,
             professionalBill: null
         };
     }

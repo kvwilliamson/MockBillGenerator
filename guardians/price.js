@@ -8,10 +8,10 @@ export async function auditPrice(billData, actuaryData, model) {
     // 1. Deterministic Calculation (BKM Formula)
     const violations = billData.lineItems.map(item => {
         const baseCode = item.code.split('-')[0];
-        const benchmarkItem = actuaryData.itemized_benchmarks?.find(b => b.code === baseCode);
+        const benchmarkItem = actuaryData?.find(b => b.code === baseCode);
 
-        // BKM Rule: If benchmark is missing, fallback to $100 for safety or AI lookup (handled in orchestrator)
-        const medicareRate = benchmarkItem ? benchmarkItem.estimated_fair_price : 100;
+        // BKM Rule: Prioritize the raw Medicare rate from our deterministic DB
+        const medicareRate = benchmarkItem ? benchmarkItem.medicare_rate : 100;
         const threshold = (baseMultiplier * medicareRate) * sensitivity;
 
         const billed = item.unitPrice;

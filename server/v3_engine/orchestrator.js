@@ -39,13 +39,43 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
 
         // --- PHASE 4.5: Deterministic Pricing Hardening ---
         console.log('[Phase 4.5] Hardening Prices (Deterministic)...');
+
+        // Determine Effective Payer (Chargemaster vs FMV for Self-Pay)
+        let effectivePayer = payerType;
+        if (payerType === 'Self-Pay') {
+            const instructions = (scenario.billingInstructions || "").toLowerCase();
+            const forcesChargemaster = instructions.includes("gross charges") ||
+                instructions.includes("full list price") ||
+                instructions.includes("no discount");
+
+            if (forcesChargemaster) {
+                console.log("[Orchestrator] Self-Pay: Forced to Chargemaster (8.0x) by scenario.");
+                effectivePayer = 'Self-Pay';
+            } else {
+                // PHASE 8: 50/50 SPLIT (Gross vs. AGB) (V2026.3 Capstone)
+                const useChargemaster = Math.random() > 0.5; // 50% chance
+                effectivePayer = useChargemaster ? 'Self-Pay' : 'Self-Pay-FMV';
+
+                // Tag the mode for Publisher
+                financialResult.appliedPricingMode = useChargemaster ? 'GROSS' : 'AGB';
+
+                console.log(`[Orchestrator] Self-Pay: Selected ${effectivePayer} (${financialResult.appliedPricingMode}) mode.`);
+            }
+        }
+
         const hardenItems = async (items) => {
             if (!items) return [];
             return await Promise.all(items.map(async (item) => {
                 const medicareRate = await fetchMedicareRate(genAI_Model, item.code, item.description);
                 const modifiers = String(item.code).split('-').slice(1);
                 const cityZip = `${facilityData.city} ${facilityData.zip}`;
-                const hardenedPrice = calculateBilledPrice(medicareRate, payerType, facilityData.state, cityZip, modifiers);
+                let hardenedPrice = calculateBilledPrice(medicareRate, effectivePayer, facilityData.state, cityZip, modifiers);
+
+                // FAILSAFE: If Supplies (99070) came out as $0.00 or too low, force a minimum.
+                if (String(item.code).startsWith('99070') && hardenedPrice < 15.00) {
+                    console.log(`[Pricing FailSafe] Boosting 99070 from ${hardenedPrice} to $45.00`);
+                    hardenedPrice = 45.00;
+                }
 
                 return {
                     ...item,
@@ -55,14 +85,46 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
             }));
         };
 
+        // --- PHASE 4.X: TEMPORAL CLAMPING (V2026.3) ---
+        // Middleware to ensure all dates are strictly within [Admit, Discharge].
+        const clampDates = (items, admitDate, dischargeDate) => {
+            if (!items || !admitDate) return items;
+
+            // Helper to parse "YYYY-MM-DD"
+            const parseD = (d) => new Date(d);
+            const fmtD = (d) => d.toISOString().split('T')[0];
+
+            const start = parseD(admitDate);
+            const end = dischargeDate ? parseD(dischargeDate) : start;
+
+            return items.map(item => {
+                // If item has no date, default to Admit Date
+                if (!item.date) return { ...item, date: admitDate };
+
+                const d = parseD(item.date);
+                if (d < start) {
+                    // console.log(`[Temporal] Clamping PRE-ADMIT date ${item.date} -> ${admitDate}`);
+                    return { ...item, date: admitDate };
+                }
+                if (d > end) {
+                    // console.log(`[Temporal] Clamping POST-DISCHARGE date ${item.date} -> ${dischargeDate}`);
+                    return { ...item, date: dischargeDate || admitDate };
+                }
+                return item;
+            });
+        };
+
         if (financialResult.type === 'SPLIT') {
             financialResult.facility.line_items = await hardenItems(financialResult.facility.line_items);
+            financialResult.facility.line_items = clampDates(financialResult.facility.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
             financialResult.facility.total = financialResult.facility.line_items.reduce((s, i) => s + i.total_charge, 0);
 
             financialResult.professional.line_items = await hardenItems(financialResult.professional.line_items);
+            financialResult.professional.line_items = clampDates(financialResult.professional.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
             financialResult.professional.total = financialResult.professional.line_items.reduce((s, i) => s + i.total_charge, 0);
         } else {
             financialResult.line_items = await hardenItems(financialResult.line_items);
+            financialResult.line_items = clampDates(financialResult.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
             financialResult.total_billed = financialResult.line_items.reduce((s, i) => s + i.total_charge, 0);
         }
 

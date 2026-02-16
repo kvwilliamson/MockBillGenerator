@@ -19,9 +19,10 @@ export const STATE_Z_FACTORS = {
 
 export const PAYER_MULTIPLIERS = {
     'Medicare': 1.0,
-    'Commercial': 2.0,
-    'Self-Pay': 2.5,
-    'High-Deductible': 2.0,
+    'Commercial': 5.0, // Increased to reflect Billed Charges
+    'Self-Pay': 8.0,   // Increased to reflect Hospital Chargemaster (Gross)
+    'Self-Pay-FMV': 2.0, // Discounted rate (approx 2x Medicare)
+    'High-Deductible': 5.0,
     'Medicaid': 1.0,
     'Tricare': 1.0
 };
@@ -37,6 +38,24 @@ export const isMajorMetro = (text) => {
     return hasMetroName || hasMetroZip;
 };
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load local Medicare benchmarks
+let MEDICARE_BENCHMARKS = [];
+try {
+    const benchmarksPath = path.join(__dirname, 'data', 'medicare_benchmarks.json');
+    if (fs.existsSync(benchmarksPath)) {
+        MEDICARE_BENCHMARKS = JSON.parse(fs.readFileSync(benchmarksPath, 'utf8'));
+    }
+} catch (e) {
+    console.error("[Pricing Core] Failed to load local benchmarks:", e.message);
+}
+
 const MEDICARE_CACHE = new Map();
 
 /**
@@ -45,6 +64,12 @@ const MEDICARE_CACHE = new Map();
  */
 export function getBasePrice(cpt) {
     const code = String(cpt);
+
+    // Check local benchmarks first (Deterministic Lookup)
+    const benchmark = MEDICARE_BENCHMARKS.find(b => b.code === code);
+    if (benchmark) return benchmark.medicareRate;
+
+    // Hardcoded fallbacks for critical codes
     if (code.startsWith('99285')) return 380;
     if (code.startsWith('99284')) return 230;
     if (code.startsWith('99283')) return 150;
@@ -72,17 +97,28 @@ export function getBasePrice(cpt) {
     if (code.startsWith('131')) return 180;
     if (code.startsWith('12011')) return 43;
     if (code.startsWith('9637')) return 35;
+    if (code.startsWith('99070')) return 45; // Default for Supplies
     if (code.startsWith('1')) return 50;
     return 100;
 }
 
 /**
- * Fetches Medicare rate using AI.
+ * Fetches Medicare rate using Hybrid Lookup (Cache -> Local DB -> AI Fallback).
  */
 export async function fetchMedicareRate(model, code, desc) {
     const baseCode = String(code).split('-')[0];
+
+    // 1. Check In-Memory Cache
     if (MEDICARE_CACHE.has(baseCode)) return MEDICARE_CACHE.get(baseCode);
 
+    // 2. Check Local Deterministic DB
+    const benchmark = MEDICARE_BENCHMARKS.find(b => b.code === baseCode);
+    if (benchmark) {
+        MEDICARE_CACHE.set(baseCode, benchmark.medicareRate);
+        return benchmark.medicareRate;
+    }
+
+    // 3. AI Fallback (Reserving Gemini for niche cases)
     const prompt = `
         You are "The Medicare Rate Lookup Agent". Return the current CMS MPFS National Average rate for:
         CPT/HCPCS "${code}" - "${desc}"
@@ -90,6 +126,7 @@ export async function fetchMedicareRate(model, code, desc) {
     `;
 
     try {
+        console.log(`[Pricing Core] AI Fallback for ${code}...`);
         const result = await model.generateContent(prompt);
         const text = result.response.text();
         let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -98,7 +135,7 @@ export async function fetchMedicareRate(model, code, desc) {
         MEDICARE_CACHE.set(baseCode, rate);
         return rate;
     } catch (e) {
-        console.warn(`[Medicare Lookup] Fallback for ${code}`);
+        console.warn(`[Medicare Lookup] Static Fallback for ${code}`);
         return getBasePrice(code);
     }
 }
@@ -108,8 +145,13 @@ export async function fetchMedicareRate(model, code, desc) {
  */
 export function calculateBilledPrice(medicareRate, payerType, state, cityZip, modifiers = []) {
     let y = PAYER_MULTIPLIERS.Commercial;
-    if (payerType.includes("Medicare")) y = PAYER_MULTIPLIERS.Medicare;
-    else if (payerType.includes("Self") || payerType.includes("Uninsured")) y = PAYER_MULTIPLIERS["Self-Pay"];
+    if (PAYER_MULTIPLIERS[payerType]) {
+        y = PAYER_MULTIPLIERS[payerType];
+    } else if (payerType.includes("Medicare")) {
+        y = PAYER_MULTIPLIERS.Medicare;
+    } else if (payerType.includes("Self") || payerType.includes("Uninsured")) {
+        y = PAYER_MULTIPLIERS["Self-Pay"];
+    }
 
     let z = STATE_Z_FACTORS[state] || 1.0;
     if (isMajorMetro(cityZip)) {

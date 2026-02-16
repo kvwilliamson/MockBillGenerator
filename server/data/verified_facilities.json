@@ -1,0 +1,82 @@
+[
+    {
+        "name": "North Colorado Medical Center",
+        "address": "1830 Hilltop Rd",
+        "city": "Greeley",
+        "state": "CO",
+        "zip": "80631",
+        "phone": "970-352-4121",
+        "domain": "bannerhealth.com",
+        "npi": "1548084742",
+        "taxId": "85-8816083",
+        "type": "Hospital",
+        "billing_model": "SPLIT",
+        "remittance": {
+            "payee": "Banner Health",
+            "address": "PO Box 740312",
+            "city": "Los Angeles",
+            "state": "CA",
+            "zip": "90074-0312"
+        }
+    },
+    {
+        "name": "St. John's Mercy Hospital",
+        "address": "1919 S. Liberty Street",
+        "city": "Springfield",
+        "state": "MO",
+        "zip": "65804",
+        "phone": "877-313-6047",
+        "domain": "mercy.net",
+        "npi": "1207217393",
+        "taxId": "93-6754210",
+        "type": "Hospital",
+        "billing_model": "SPLIT",
+        "remittance": {
+            "payee": "Mercy Health Payment Center",
+            "address": "PO Box 8034",
+            "city": "Springfield",
+            "state": "MO",
+            "zip": "65801-8034"
+        }
+    },
+    {
+        "name": "Jackson Hospital",
+        "address": "1720 13th Ave Ste 103",
+        "city": "Jackson",
+        "state": "AL",
+        "zip": "36545",
+        "phone": "877-648-3103",
+        "domain": "jacksonhospital.org",
+        "npi": "1617656453",
+        "taxId": "97-8256588",
+        "type": "Hospital",
+        "billing_model": "SPLIT",
+        "remittance": {
+            "payee": "Jackson Hospital & Clinic",
+            "address": "PO Box 1121",
+            "city": "Jackson",
+            "state": "AL",
+            "zip": "36545"
+        }
+    },
+    {
+        "name": "University Medical Center Southern Nevada",
+        "address": "1800 W Charleston Blvd",
+        "city": "Las Vegas",
+        "state": "NV",
+        "zip": "89102",
+        "phone": "702-383-2000",
+        "domain": "umcsn.com",
+        "npi": "1023004568",
+        "taxId": "88-0000000",
+        "type": "Hospital",
+        "billing_model": "SPLIT",
+        "remittance": {
+            "payee": "UMC Health System",
+            "address": "PO Box 3010",
+            "city": "Las Vegas",
+            "state": "NV",
+            "zip": "89102-3010"
+        }
+    }
+]
