@@ -51,12 +51,11 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
             if (forcesChargemaster) {
                 console.log("[Orchestrator] Self-Pay: Forced to Chargemaster (8.0x) by scenario.");
                 effectivePayer = 'Self-Pay';
+                financialResult.appliedPricingMode = 'GROSS';
             } else {
-                // PHASE 8: 50/50 SPLIT (Gross vs. AGB) (V2026.3 Capstone)
-                const useChargemaster = Math.random() > 0.5; // 50% chance
+                // Phase 9.2: Behavioral Pricing - 50/50 Split but ALWAYS show some discount
+                const useChargemaster = Math.random() > 0.5;
                 effectivePayer = useChargemaster ? 'Self-Pay' : 'Self-Pay-FMV';
-
-                // Tag the mode for Publisher
                 financialResult.appliedPricingMode = useChargemaster ? 'GROSS' : 'AGB';
 
                 console.log(`[Orchestrator] Self-Pay: Selected ${effectivePayer} (${financialResult.appliedPricingMode}) mode.`);

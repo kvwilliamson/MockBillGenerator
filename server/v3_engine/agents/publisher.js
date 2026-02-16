@@ -78,8 +78,10 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
 
         // 2. Financial Metrics
         const subtotal = total;
-        const adjAmount = financial.appliedPricingMode === 'AGB' ? (subtotal * 0.45).toFixed(2) : 0.00;
-        const grandTotal = financial.appliedPricingMode === 'AGB' ? (subtotal * 0.55).toFixed(2) : subtotal;
+        // Phase 9.2: Behavioral - Always show a discount for Self-Pay
+        const discountRate = financial.appliedPricingMode === 'AGB' ? 0.45 : (payerType === 'Self-Pay' ? 0.15 : 0.00);
+        const adjAmount = (subtotal * discountRate).toFixed(2);
+        const grandTotal = (subtotal - adjAmount).toFixed(2);
 
         // 3. Expert Identifiers
         const tob = isPro ? "1500" : (admin.tob || "131");
