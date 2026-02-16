@@ -163,17 +163,24 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                     statementDate: "Statement Date",
                     dueDate: "Payment Due",
                     disclaimers: {
-                        fa: `Financial Assistance Policy: If you are uninsured or have a high deductible, you may be eligible for a discount under our 501(r) policy. Proof of income and assets is required. Contact ${facility.phone || 'us'} for an application or visit www.${facility.domain || 'hospital.org'}/financial-assist.`,
+                        fa: `Financial Assistance / Charity Care Policy: In accordance with Section 501(r) of the Internal Revenue Code, ${facility.name} provides financial assistance to eligible patients who are uninsured, underinsured, or otherwise unable to pay for medically necessary care. Eligibility is determined based on Federal Poverty Guidelines (FPG), assets, and family size. To apply for a Charity Care Adjustment, please contact our Financial Counseling Department at ${facility.phone || 'us'} or download the application at www.${facility.domain || 'hospital.org'}/financial-assistance.`,
                         nsa: payerType === 'Self-Pay' || payerType === 'Uninsured'
-                            ? "No Surprises Act / Good Faith Estimate: You are protected from balance billing for emergency services. If your final bill exceeds your Good Faith Estimate by $400 or more, you may initiate a patient-provider dispute resolution process within 120 days."
-                            : "No Surprises Act: You are protected from balance billing if you receive emergency care from an out-of-network provider or facility. Your cost-sharing is limited to the in-network amount.",
+                            ? "YOUR RIGHTS AND PROTECTIONS AGAINST SURPRISE MEDICAL BILLS (OMB Control Number: 1210-0169). Under the No Surprises Act, you have the right to receive a 'Good Faith Estimate' explaining how much your medical care will cost. If you schedule an item or service at least 3 business days in advance, we must give you a Good Faith Estimate in writing... If you receive a bill that is at least $400 more than your Good Faith Estimate, you can dispute the bill. For questions or more information about your right to a Good Faith Estimate, visit www.cms.gov/nosurprises or call 1-800-985-3059."
+                            : "NOTICE: PROTECTIONS AGAINST SURPRISE BILLING. When you get emergency care or get treated by an out-of-network provider at an in-network hospital or ambulatory surgical center, you are protected from surprise billing or balance billing. Your cost-sharing for emergency services is limited to your in-network amount. You cannot be balance billed for these emergency services.",
                         promptPay: payerType === 'Self-Pay'
-                            ? "PROMPT PAY DISCOUNT: Pay this balance in full within 30 days of the Statement Date to receive an additional 20% reduction."
+                            ? "PROMPT PAY DISCOUNT: As a courtesy to our Uninsured patients, an additional 20% reduction may be applied for balances settled in full within 30 days of the Statement Date. This is in addition to the Self-Pay Discount applied at the time of service."
                             : ""
                     }
                 },
                 scenarioId: scenario.scenarioId,
-                scenarioName: scenario.scenarioName
+                scenarioName: scenario.scenarioName,
+                // Phase 9.1 Behavioral Labels
+                behavioralLabels: payerType === 'Self-Pay' ? {
+                    subtotal: "Gross Charges",
+                    adjustment: "Self-Pay Discount",
+                    charity: "Charity Adjustment",
+                    totalDue: "Amount Due"
+                } : null
             }
         };
     };

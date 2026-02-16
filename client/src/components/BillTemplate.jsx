@@ -205,14 +205,16 @@ export const BillTemplate = ({ data }) => {
                 <table style={{ width: '350px' }}>
                     <tbody>
                         <tr>
-                            <td style={{ padding: '5px' }}>{data.labels?.totalCharges || 'Total Account Charges'}:</td>
+                            <td style={{ padding: '5px' }}>{data.behavioralLabels?.subtotal || data.labels?.totalCharges || 'Total Account Charges'}:</td>
                             <td style={{ padding: '5px', textAlign: 'right' }}>{formatCurrency(subtotal)}</td>
                         </tr>
                         {/* Dynamic Adjustment Breakdown */}
                         {data.adjustmentsBreakdown && data.adjustmentsBreakdown.length > 0 ? (
                             data.adjustmentsBreakdown.map((adj, idx) => (
                                 <tr key={idx}>
-                                    <td style={{ padding: '5px', fontStyle: 'italic', color: '#666' }}>{adj.label}:</td>
+                                    <td style={{ padding: '5px', fontStyle: 'italic', color: '#666' }}>
+                                        {data.behavioralLabels && adj.label.includes('Uninsured') ? data.behavioralLabels.adjustment : adj.label}:
+                                    </td>
                                     <td style={{ padding: '5px', textAlign: 'right', color: '#666' }}>
                                         {formatCurrency(-Math.abs(adj.amount))}
                                     </td>
@@ -221,14 +223,14 @@ export const BillTemplate = ({ data }) => {
                         ) : (
                             (adjustments || 0) > 0 && (
                                 <tr>
-                                    <td style={{ padding: '5px', fontStyle: 'italic', color: '#666' }}>Adjustments/Discounts:</td>
+                                    <td style={{ padding: '5px', fontStyle: 'italic', color: '#666' }}>{data.behavioralLabels?.adjustment || 'Adjustments/Discounts'}:</td>
                                     <td style={{ padding: '5px', textAlign: 'right', color: '#666' }}>{formatCurrency(-Math.abs(adjustments))}</td>
                                 </tr>
                             )
                         )}
 
                         <tr style={{ background: '#eee', fontWeight: 'bold', fontSize: '14px', borderTop: '2px solid #ccc' }}>
-                            <td style={{ padding: '10px' }}>{data.labels?.balance || 'TOTAL AMOUNT DUE'}:</td>
+                            <td style={{ padding: '10px' }}>{data.behavioralLabels?.totalDue || data.labels?.balance || 'TOTAL AMOUNT DUE'}:</td>
                             <td style={{ padding: '10px', textAlign: 'right' }}>{formatCurrency(grandTotal)}</td>
                         </tr>
                     </tbody>
