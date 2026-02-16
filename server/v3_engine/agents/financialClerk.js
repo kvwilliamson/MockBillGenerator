@@ -15,28 +15,34 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         **INPUT CODES**:
         ${JSON.stringify(codedServices)}
         
-        **PRICING RULES (DETERMINISTIC)**:
-        1.  **Pricing is Automatic**: Do not worry about the exact dollar amounts; a deterministic engine will override your prices using Medicare rates * Multipliers.
+        **PRICING RULES**:
+        1.  **Pricing is Automatic**: Do not worry about the exact dollar amounts; a deterministic engine will override your prices.
         2.  **Revenue Code Mapping (STRICT)**:
-           - Laboratory (8xxxx): **0300**
-           - Radiology (7xxxx): **0320** / **0350** / **0610**
-           - Cardiology/ECG (93xxx): **0730**
-           - Pharmacy/J-codes: **0250**
-           - ER Facility: **0450**
-           - Clinic Facility: **0510**
-           - Observation Hourly (G0378): **0762**
-           - **CRITICAL**: If you see TWO E/M codes (e.g. 99285 AND 99285), REMOVE ONE. 
-           - **SUPPLIES**: NEVER use an E/M code (992xx) for Supplies. Use 99070 or specific HCPCS codes (Axxxx, Cxxxx).
-           - Inpatient Room (Rev 0110-0120): **Conditional on Inpatient Status**
-             
-        3. **CHARGEMASTER STYLE**: Provide "uneven" unit prices (e.g., $154.23 instead of $150.00) to increase realism.
+           - **RESPECT INPUT**: If the input code already has a "rev_code", USE IT.
+           - **FALLBACK**:
+             - Laboratory (8xxxx): **0300** (or 0301/0305/0310 if already assigned)
+             - Radiology (7xxxx): **0320** / **0350** / **0610**
+             - Cardiology/ECG (93xxx): **0730**
+             - Pharmacy/J-codes: **0250**
+             - ER Facility: **0450**
+             - Professional Fees (Pro Bill): **0960** / **0981**
+             - Clinic Facility: **0510**
+             - Observation Hourly (G0378): **0762**
+             - **SUPPLIES**: NEVER use an E/M code (992xx) for Supplies. Use 99070.
+              
+        3. **CHARGEMASTER STYLE**: Provide "uneven" unit prices for realism.
+        
+        **CRITICAL - SPLIT BILLING**: 
+        If Billing Model is SPLIT BILL, you MUST return BOTH "facility_line_items" AND "professional_line_items".
+        - **Facility Bill**: Should contain ALL technology, labs, pharmacy, and facility-mode E/M (Modifier -TC).
+        - **Professional Bill**: Should contain the Physician's E/M (Modifier -26) and any procedures performed by the doctor.
+        - **NEVER** leave "professional_line_items" empty if "facility_line_items" has an E/M code.
            
         **RETURN JSON**:
         {
-            // IF SPLIT:
             "facility_line_items": [
                 {
-                    "code": "99285",
+                    "code": "99285-TC",
                     "description": "HC ED VISIT LVL 5",
                     "rev_code": "0450",
                     "quantity": 1,
@@ -46,24 +52,12 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
             ],
             "professional_line_items": [
                 {
-                    "code": "99285",
+                    "code": "99285-26",
                     "description": "ED PHYSICIAN VISIT 5",
                     "rev_code": "0981", 
                     "quantity": 1,
                     "unit_price": 457.12,
                     "total_charge": 457.12
-                }
-            ],
-            
-            // IF GLOBAL:
-            "line_items": [
-                {
-                    "code": "99213",
-                    "description": "OFFICE VISIT LVL 3",
-                    "rev_code": "0510",
-                    "quantity": 1,
-                    "unit_price": 154.23,
-                    "total_charge": 154.23
                 }
             ]
         }
