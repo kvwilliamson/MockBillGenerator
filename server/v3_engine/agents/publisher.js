@@ -106,6 +106,12 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                     state: clinical.patient.state,
                     zip: clinical.patient.zip,
                 },
+                // Phase 9.2: Root-level shortcuts for frontend compatibility
+                patientName: clinical.patient.name,
+                patientDOB: clinical.patient.dob,
+                admissionDate: clinical.encounter.date_of_service,
+                dischargeDate: clinical.encounter.date_of_service,
+
                 // Phase 9: Guarantor (Default to Patient for realism)
                 guarantor: clinical.patient.name,
                 patientId: sharedMRN,
