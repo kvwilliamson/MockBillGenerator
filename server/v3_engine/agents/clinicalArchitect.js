@@ -44,6 +44,8 @@ export async function generateClinicalArchitect(model, scenario, facility, siteO
             },
             "encounter": {
                 "date_of_service": "${new Date().toISOString().split('T')[0]}",
+                "admission_date": "YYYY-MM-DD",
+                "discharge_date": "YYYY-MM-DD",
                 "chief_complaint": "...",
                 "hpi": "History of Present Illness...",
                 "exam_notes": "Physical exam findings...",

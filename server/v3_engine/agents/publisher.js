@@ -41,15 +41,25 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                 currentHour++;
                 currentMinute %= 60;
             }
-            const mm = (dosDate.getMonth() + 1).toString().padStart(2, '0');
-            const dd = dosDate.getDate().toString().padStart(2, '0');
-            const yyyy = dosDate.getFullYear();
+            // Use item.date if provided, fallback to clinical DOS
+            let itemDate = item.date;
+            if (!itemDate || itemDate === "YYYY-MM-DD") {
+                const mm = (dosDate.getMonth() + 1).toString().padStart(2, '0');
+                const dd = dosDate.getDate().toString().padStart(2, '0');
+                const yyyy = dosDate.getFullYear();
+                itemDate = `${mm}/${dd}/${yyyy}`;
+            } else if (itemDate.includes('-')) {
+                // Normalize YYYY-MM-DD to MM/DD/YYYY for printing
+                const parts = itemDate.split('-');
+                itemDate = `${parts[1]}/${parts[2]}/${parts[0]}`;
+            }
+
             const hh = currentHour.toString().padStart(2, '0');
             const min = currentMinute.toString().padStart(2, '0');
 
             return {
-                date: `${mm}/${dd}/${yyyy}`,
-                timestamp: `${mm}/${dd}/${yyyy} ${hh}:${min}`,
+                date: itemDate,
+                timestamp: `${itemDate} ${hh}:${min}`,
                 code: item.code || item.cpt,
                 description: item.description,
                 revCode: item.rev_code,
@@ -128,8 +138,8 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                 patientId: sharedMRN,
                 accountNumber: "AC-" + Math.floor(Math.random() * 9000000 + 1000000),
                 encounter: {
-                    admitDate: clinical.encounter.date_of_service,
-                    dischargeDate: clinical.encounter.date_of_service,
+                    admitDate: clinical.encounter.admission_date || clinical.encounter.date_of_service,
+                    dischargeDate: clinical.encounter.discharge_date || clinical.encounter.date_of_service,
                     type: admin.admission_type || "1",
                     source: admin.admission_source || "7",
                     status: admin.discharge_status || "01",
@@ -156,8 +166,8 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                 insPaid: 0.00,
                 grandTotal: grandTotal,
                 header: {
-                    admitDate: clinical.encounter.date_of_service,
-                    dischargeDate: clinical.encounter.date_of_service,
+                    admitDate: clinical.encounter.admission_date || clinical.encounter.date_of_service,
+                    dischargeDate: clinical.encounter.discharge_date || clinical.encounter.date_of_service,
                     patientType: admin.tob === "111" ? 'Inpatient' : (admin.admission_type === '1' ? 'Emergency' : 'Outpatient'),
                     financialClass: payerType,
                     fcCode: fcCode

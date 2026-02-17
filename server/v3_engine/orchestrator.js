@@ -93,6 +93,16 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
             const parseD = (d) => new Date(d);
             const fmtD = (d) => d.toISOString().split('T')[0];
 
+            // Phase 14 Hardening: Normalize Admit/Discharge formats
+            if (admitDate && admitDate.includes('/')) {
+                const p = admitDate.split('/');
+                admitDate = `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}`;
+            }
+            if (dischargeDate && dischargeDate.includes('/')) {
+                const p = dischargeDate.split('/');
+                dischargeDate = `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}`;
+            }
+
             const start = parseD(admitDate);
             const end = dischargeDate ? parseD(dischargeDate) : start;
 
