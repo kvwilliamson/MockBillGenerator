@@ -19,28 +19,17 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
     console.log(`\n=== STARTING V3 ENGINE (Scenario ID: ${scenarioId}, Payer: ${payerType}) ===`);
 
     try {
-        // 0. Load Scenario Instruction
         const scenario = canonicalInstructions.find(s => s.scenarioId === String(scenarioId));
         if (!scenario) throw new Error(`Scenario ID ${scenarioId} not found in canonical instructions.`);
 
         const randomSeed = Math.floor(Math.random() * 1000000);
-
-        // PHASE 1: Facility Scout
         const facilityData = await generateFacilityIdentity(genAI_Model, siteOfService, ownershipType, randomSeed);
-
-        // PHASE 2: Clinical Architect
         const clinicalTruth = await generateClinicalArchitect(genAI_Model, scenario, facilityData, siteOfService);
-
-        // PHASE 3: Medical Coder
         const codingResult = await generateMedicalCoder(genAI_Model, clinicalTruth, scenario, siteOfService, billingModel);
-
-        // PHASE 4: Financial Clerk (AI selects codes and revenue codes)
         const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData, payerType, billingModel, siteOfService);
 
-        // --- PHASE 4.5: Deterministic Pricing Hardening ---
         console.log('[Phase 4.5] Hardening Prices (Deterministic)...');
 
-        // Determine Effective Payer (Chargemaster vs FMV for Self-Pay)
         let effectivePayer = payerType;
         if (payerType === 'Self-Pay') {
             const instructions = (scenario.billingInstructions || "").toLowerCase();
@@ -49,11 +38,9 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
                 instructions.includes("no discount");
 
             if (forcesChargemaster || chargeRate === 'CHARGEMASTER') {
-                console.log("[Orchestrator] Self-Pay: Using CHARGEMASTER (8.0x) mode.");
                 effectivePayer = 'Self-Pay';
                 financialResult.appliedPricingMode = 'GROSS';
             } else {
-                console.log("[Orchestrator] Self-Pay: Using FMV (AGB/Market) mode.");
                 effectivePayer = 'Self-Pay-FMV';
                 financialResult.appliedPricingMode = 'AGB';
             }
@@ -67,30 +54,18 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
                 const cityZip = `${facilityData.city} ${facilityData.zip}`;
                 let hardenedPrice = calculateBilledPrice(medicareRate, effectivePayer, facilityData.state, cityZip, modifiers);
 
-                // FAILSAFE: If Supplies (99070) came out as $0.00 or too low, force a minimum.
                 if (String(item.code).startsWith('99070') && hardenedPrice < 15.00) {
-                    console.log(`[Pricing FailSafe] Boosting 99070 from ${hardenedPrice} to $45.00`);
                     hardenedPrice = 45.00;
                 }
 
-                return {
-                    ...item,
-                    unit_price: hardenedPrice,
-                    total_charge: parseFloat((hardenedPrice * (item.quantity || 1)).toFixed(2))
-                };
+                const finalTotal = parseFloat((hardenedPrice * (item.quantity || 1)).toFixed(2));
+                return { ...item, unit_price: hardenedPrice, total_charge: finalTotal };
             }));
         };
 
-        // --- PHASE 4.X: TEMPORAL CLAMPING (V2026.3) ---
-        // Middleware to ensure all dates are strictly within [Admit, Discharge].
         const clampDates = (items, admitDate, dischargeDate) => {
             if (!items || !admitDate) return items;
-
-            // Helper to parse "YYYY-MM-DD"
             const parseD = (d) => new Date(d);
-            const fmtD = (d) => d.toISOString().split('T')[0];
-
-            // Phase 14 Hardening: Normalize Admit/Discharge formats
             if (admitDate && admitDate.includes('/')) {
                 const p = admitDate.split('/');
                 admitDate = `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}`;
@@ -99,69 +74,35 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
                 const p = dischargeDate.split('/');
                 dischargeDate = `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}`;
             }
-
             const start = parseD(admitDate);
             const end = dischargeDate ? parseD(dischargeDate) : start;
 
             return items.map(item => {
-                // Force Clean Date Format
                 let cleanDate = item.date;
                 if (cleanDate && cleanDate.includes('/')) {
                     const parts = cleanDate.split('/');
                     if (parts[2].length === 4) cleanDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
                 }
-
-                // If item has no date or invalid, default to Admit Date
                 if (!cleanDate) return { ...item, date: admitDate };
-
                 const d = parseD(cleanDate);
                 if (isNaN(d.getTime())) return { ...item, date: admitDate };
-
-                if (d < start) {
-                    console.log(`[Temporal] Clamping PRE-ADMIT date ${item.date} -> ${admitDate}`);
-                    return { ...item, date: admitDate };
-                }
-                if (d > end) {
-                    console.log(`[Temporal] Clamping POST-DISCHARGE date ${item.date} -> ${dischargeDate}`);
-                    return { ...item, date: dischargeDate || admitDate };
-                }
+                if (d < start) return { ...item, date: admitDate };
+                if (d > end) return { ...item, date: dischargeDate || admitDate };
                 return { ...item, date: cleanDate };
-            });
-        };
-
-        // Phase 16.1: Description Realism Polish (v2026.17)
-        const scrubDescriptions = (items) => {
-            if (!items) return items;
-            const suffixes = [
-                /\s+FACILITY\b/gi, /\s+PROFESSIONAL\b/gi, /\s+TECHNICAL\b/gi,
-                /\s+PRO\b/gi, /\s+TECH\b/gi, /\s+COMPONENT\b/gi,
-                /\s+PHYSICIAN\b/gi, /\s+PRACTITIONER\b/gi, /\- FACILITY\b/gi, /\- PROFESSIONAL\b/gi
-            ];
-            return items.map(item => {
-                let d = item.description || item.billing_description || '';
-                suffixes.forEach(regex => {
-                    d = d.replace(regex, '').trim();
-                });
-                return { ...item, description: d, billing_description: d };
             });
         };
 
         if (financialResult.type === 'SPLIT') {
             financialResult.facility.line_items = await hardenItems(financialResult.facility.line_items);
             financialResult.facility.line_items = clampDates(financialResult.facility.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
-            financialResult.facility.line_items = scrubDescriptions(financialResult.facility.line_items);
             financialResult.facility.total = financialResult.facility.line_items.reduce((s, i) => s + i.total_charge, 0);
 
             financialResult.professional.line_items = await hardenItems(financialResult.professional.line_items);
             financialResult.professional.line_items = clampDates(financialResult.professional.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
-            financialResult.professional.line_items = scrubDescriptions(financialResult.professional.line_items);
             financialResult.professional.total = financialResult.professional.line_items.reduce((s, i) => s + i.total_charge, 0);
         } else {
             financialResult.line_items = await hardenItems(financialResult.line_items);
             financialResult.line_items = clampDates(financialResult.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
-            financialResult.line_items = scrubDescriptions(financialResult.line_items);
-
-            // --- GLOBAL STRIP (V2026.9) ---
             if (billingModel === 'GLOBAL') {
                 financialResult.line_items = financialResult.line_items.map(item => {
                     const newItem = { ...item };
@@ -171,61 +112,67 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
                     return newItem;
                 });
             }
-
             financialResult.total_billed = financialResult.line_items.reduce((s, i) => s + i.total_charge, 0);
         }
 
-        // PHASE 5: Publisher
         let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType, siteOfService);
-
-        // PHASE 6: Polish Agent
         billData = await generatePolishAgent(genAI_Model, billData, scenario, siteOfService, billingModel);
-
-        // PHASE 7: Reviewer
         const reviewReport = await generateReviewer(genAI_Model, billData, clinicalTruth, codingResult, scenario, siteOfService, billingModel);
 
         console.log("=== V3 ENGINE COMPLETE ===");
 
-        // Phase 16.2: Global Realism Scrub (Final Pass)
-        const finalScrub = (billObj) => {
-            if (!billObj || !billObj.bill_data || !billObj.bill_data.lineItems) return billObj;
-            const suffixes = [
-                /\s+FACILITY\b/gi, /\s+PROFESSIONAL\b/gi, /\s+TECHNICAL\b/gi,
-                /\s+PRO\b/gi, /\s+TECH\b/gi, /\s+COMPONENT\b/gi, /\s+COMP\b/gi,
-                /\s+PHYSICIAN\b/gi, /\s+PRACTITIONER\b/gi,
-                /\s*\-\s*FACILITY\b/gi, /\s*\-\s*PROFESSIONAL\b/gi,
-                /\s*\-\s*TECHNICAL\b/gi, /\s*\-\s*PRO\b/gi
-            ];
-            billObj.bill_data.lineItems = billObj.bill_data.lineItems.map(item => {
-                let d = item.description || '';
-                suffixes.forEach(regex => {
-                    d = d.replace(regex, '');
-                });
-                d = d.replace(/\s+/g, ' ').trim(); // Collapse spaces
-                return { ...item, description: d };
-            });
-            // Update subtotals/labels if necessary (descriptions only here)
-            return billObj;
+        // --- PHASE 17.1: DEEP REALISM SCRUB (v2026.20) ---
+        const deepScrub = (obj, path = 'root') => {
+            if (!obj) return obj;
+            if (typeof obj === 'string') {
+                const patterns = [
+                    /FACILITY/gi, /PROFESSIONAL/gi, /TECHNICAL/gi,
+                    /PRO\b/gi, /TECH\b/gi, /COMPONENT/gi, /COMP\b/gi,
+                    /PHYSICIAN/gi, /PRACTITIONER/gi
+                ];
+                let d = obj;
+                const original = d;
+                patterns.forEach(p => { d = d.replace(p, ''); });
+                const final = d.replace(/[\-\/]/g, ' ').replace(/\s+/g, ' ').trim();
+
+                if (original !== final && original.length > 0) {
+                    console.log(`[DeepScrub] ${path}: "${original}" -> "${final}"`);
+                }
+                return final;
+            }
+            if (Array.isArray(obj)) return obj.map((item, i) => deepScrub(item, `${path}[${i}]`));
+            if (typeof obj === 'object') {
+                const newObj = {};
+                for (const key in obj) {
+                    // Update: don't scrub keys like 'code' or 'rev_code' or 'billing_description' values that are used as keys
+                    newObj[key] = (key === 'code' || key === 'rev_code' || key === 'revCode') ? obj[key] : deepScrub(obj[key], `${path}.${key}`);
+                }
+                return newObj;
+            }
+            return obj;
         };
 
-        if (billData.mode === 'SPLIT') {
-            billData.facilityBill = finalScrub(billData.facilityBill);
-            billData.professionalBill = finalScrub(billData.professionalBill);
-        } else {
-            billData.facilityBill = finalScrub(billData.facilityBill);
-        }
-
-        return {
-            ...billData, // Spread: mode, facilityBill, professionalBill
+        const finalResult = {
+            ...billData,
             review_report: reviewReport,
             clinical_truth: clinicalTruth,
             scenario_meta: scenario
         };
+
+        // Failsafe for Scenario 1
+        if (!finalResult.facilityBill && (finalResult.bill_data || (finalResult.professionalBill && finalResult.professionalBill.bill_data))) {
+            const fallback = finalResult.bill_data || finalResult.professionalBill.bill_data;
+            finalResult.facilityBill = { bill_data: JSON.parse(JSON.stringify(fallback)) };
+            console.log("[Orchestrator] Failsafe: Generated facilityBill from fallback.");
+        }
+
+        return deepScrub(finalResult);
+
     } catch (criticalError) {
         console.error("CRITICAL V3 ENGINE FAILURE:", criticalError);
         return {
             mode: "GLOBAL",
-            facilityBill: null, // UI will handle this gracefully hopefully, or show error
+            facilityBill: null,
             bill_data: {
                 provider: { name: "System Error" },
                 lineItems: [{ code: "ERROR", desc: "Configuration Failure - See Logs", total: 0 }],
