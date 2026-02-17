@@ -27,7 +27,7 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
     ? JSON.stringify(STANDARD_NOMENCLATURE.slice(0, 50)) // Passing full list might be too big, pass key examples or rely on post-processing
     : "[]";
   const prompt = `
-        You are "The Medical Coder". Your goal is to assign CPT and ICD codes for a bill.
+        You are "The Medical Coder". Your goal is to assign CPT, HCPCS, and ICD codes for a bill.
         
         **INPUTS**:
         - Clinical Record: ${JSON.stringify(clinicalTruth.encounter)}
@@ -47,6 +47,10 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
              * **MANDATORY DUALITY**: For every E/M or Imaging code, you MUST provide BOTH a facility version AND a professional version in their respective arrays.
              * **NO TRIPLE BILLING**: List **ONLY** the Facility/Tech component in the facility array and **ONLY** the Professional component in the professional array.
            
+             * **SURGICAL REALISM (v2026.11)**: If OR/Surgery is performed (Rev 036x), you MUST assign:
+               - Facility: CPT for the procedure (e.g. 29881) + Anesthesia (00xxx) + Supplies.
+               - Professional: CPT for the Surgeon (29881) + Anesthesia (00xxx) + Assistant Surgeon (if needed).
+             
            - **BUNDLING RULE (CRITICAL)**: Unless the instructions explicitly say to "Unbundle" or "Explode" a code for the scenario, you must **BUNDLE** standard services according to NCCI edits.
             - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the SOS:
               * **HOSPITAL_ED**: Use 99281-99285 (ED E/M).
@@ -113,11 +117,12 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
             },
             // IF SPLIT (Hospital/ER) or COMPONENT:
             "facility_codes": [
-                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "FACILITY_EM" },
-                 { "code": "85025", "billing_description": "CBC W/DIFF", "official_description": "Blood count; complete (CBC), automated (Hgb, Hct, RBC, WBC and platelet count) and automated differential WBC count", "type": "LAB" }
+                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "type": "FACILITY_EM" },
+                 { "code": "00840", "billing_description": "ANESTHESIA FACILITY", "type": "FACILITY_SURG" }
             ],
             "professional_codes": [
-                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "PRO_EM" }
+                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "type": "PRO_EM" },
+                 { "code": "00840", "billing_description": "ANESTHESIA MD", "type": "PRO_SURG", "quantity": 12 }
             ],
             // IF GLOBAL (Single Bill):
             "line_items": [
