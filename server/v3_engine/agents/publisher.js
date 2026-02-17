@@ -6,7 +6,7 @@ import { generateLuhnPaddedNPI, generateRandomEIN } from '../utils.js';
  * Goal: Format data to match V2 JSON structure exactly.
  * This ensures the frontend renders the "Beautiful Bill" correctly.
  */
-export function generatePublisher(facility, clinical, coding, financial, scenario, payerType) {
+export function generatePublisher(facility, clinical, coding, financial, scenario, payerType, siteOfService) {
     // Generate Randomized Statement Date (15-45 days after service)
     const dosDate = new Date(clinical.encounter.date_of_service);
     const lagDays = Math.floor(Math.random() * 30) + 15;
@@ -96,7 +96,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                     contact: facility.phone || "800-444-1234",
                     domain: facility.domain || "healthcare.org",
                     // Phase 9: Service Location
-                    serviceLocation: isPro ? "Physician's Office" : facility.name
+                    serviceLocation: isPro ? (siteOfService.includes('OFFICE') ? "Physician's Office" : facility.name) : facility.name
                 },
                 npi: isPro ? generateLuhnPaddedNPI() : facility.npi,
                 taxId: isPro ? generateRandomEIN() : facility.taxId,
@@ -149,7 +149,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
                 header: {
                     admitDate: clinical.encounter.date_of_service,
                     dischargeDate: clinical.encounter.date_of_service,
-                    patientType: admin.admission_type === '1' ? 'Emergency' : 'Outpatient',
+                    patientType: admin.tob === "111" ? 'Inpatient' : (admin.admission_type === '1' ? 'Emergency' : 'Outpatient'),
                     financialClass: payerType,
                     fcCode: fcCode
                 },

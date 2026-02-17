@@ -144,7 +144,18 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
       const proCodes = aiData.professional_codes || [];
 
       facCodes.forEach(code => {
-        const cpt = code.code || '';
+        let cpt = code.code || '';
+
+        // 0. PLACEBO SCRUBBING (V2026.9.1)
+        if (cpt === '99999' || cpt === 'T1013') {
+          if (code.billing_description.toLowerCase().includes('fluids') || code.billing_description.toLowerCase().includes('iv')) {
+            code.code = 'J7030';
+            code.billing_description = 'NS 1000ML (IV FLUIDS)';
+          } else if (code.billing_description.toLowerCase().includes('visit')) {
+            code.code = '99285'; // Default to high level if hallucinating
+          }
+        }
+        cpt = code.code;
 
         // 1. Enforce -TC on Facility E/M and Shared Items
         if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {

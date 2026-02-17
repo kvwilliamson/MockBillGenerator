@@ -149,7 +149,7 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
         }
 
         // PHASE 5: Publisher
-        let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType);
+        let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType, siteOfService);
 
         // PHASE 6: Polish Agent
         billData = await generatePolishAgent(genAI_Model, billData, scenario, siteOfService, billingModel);
