@@ -119,12 +119,12 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
             },
             // IF SPLIT (Hospital/ER) or COMPONENT:
             "facility_codes": [
-                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "type": "FACILITY_EM" },
-                 { "code": "00840", "billing_description": "ANESTHESIA FACILITY", "type": "FACILITY_SURG" }
+                 { "code": "99285", "billing_description": "ED VISIT LVL 5", "type": "FACILITY_EM" },
+                 { "code": "00840", "billing_description": "ANESTHESIA", "type": "FACILITY_SURG" }
             ],
             "professional_codes": [
                  { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "type": "PRO_EM" },
-                 { "code": "00840", "billing_description": "ANESTHESIA PHYSICIAN", "type": "PRO_SURG", "quantity": 12 }
+                 { "code": "00840", "billing_description": "ANESTHESIA", "type": "PRO_SURG", "quantity": 12 }
             ],
             // IF GLOBAL (Single Bill):
             "line_items": [
@@ -185,14 +185,14 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
       const filteredProCodes = proCodes.filter(proCode => {
         const proCpt = proCode.code || '';
         const isStandardLab = proCpt.startsWith('8') && !proCpt.startsWith('883');
-        
+
         if (isStandardLab) {
-            // Check if it exists in Facility
-            const existsInFac = facCodes.some(f => (f.code || '').startsWith(proCpt.substring(0, 5)));
-            if (existsInFac) {
-                console.log(`[Coder Clean] Removing duplicate standard lab ${proCpt} from Professional Track.`);
-                return false;
-            }
+          // Check if it exists in Facility
+          const existsInFac = facCodes.some(f => (f.code || '').startsWith(proCpt.substring(0, 5)));
+          if (existsInFac) {
+            console.log(`[Coder Clean] Removing duplicate standard lab ${proCpt} from Professional Track.`);
+            return false;
+          }
         }
         return true;
       });

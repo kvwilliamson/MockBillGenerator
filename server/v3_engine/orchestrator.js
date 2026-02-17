@@ -129,17 +129,37 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
             });
         };
 
+        // Phase 16.1: Description Realism Polish (v2026.17)
+        const scrubDescriptions = (items) => {
+            if (!items) return items;
+            const suffixes = [
+                /\s+FACILITY\b/gi, /\s+PROFESSIONAL\b/gi, /\s+TECHNICAL\b/gi,
+                /\s+PRO\b/gi, /\s+TECH\b/gi, /\s+COMPONENT\b/gi,
+                /\s+PHYSICIAN\b/gi, /\s+PRACTITIONER\b/gi, /\- FACILITY\b/gi, /\- PROFESSIONAL\b/gi
+            ];
+            return items.map(item => {
+                let d = item.description || item.billing_description || '';
+                suffixes.forEach(regex => {
+                    d = d.replace(regex, '').trim();
+                });
+                return { ...item, description: d, billing_description: d };
+            });
+        };
+
         if (financialResult.type === 'SPLIT') {
             financialResult.facility.line_items = await hardenItems(financialResult.facility.line_items);
             financialResult.facility.line_items = clampDates(financialResult.facility.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
+            financialResult.facility.line_items = scrubDescriptions(financialResult.facility.line_items);
             financialResult.facility.total = financialResult.facility.line_items.reduce((s, i) => s + i.total_charge, 0);
 
             financialResult.professional.line_items = await hardenItems(financialResult.professional.line_items);
             financialResult.professional.line_items = clampDates(financialResult.professional.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
+            financialResult.professional.line_items = scrubDescriptions(financialResult.professional.line_items);
             financialResult.professional.total = financialResult.professional.line_items.reduce((s, i) => s + i.total_charge, 0);
         } else {
             financialResult.line_items = await hardenItems(financialResult.line_items);
             financialResult.line_items = clampDates(financialResult.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
+            financialResult.line_items = scrubDescriptions(financialResult.line_items);
 
             // --- GLOBAL STRIP (V2026.9) ---
             if (billingModel === 'GLOBAL') {
