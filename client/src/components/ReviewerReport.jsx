@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, Info, GripHorizontal } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Info, GripHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 
 export const ReviewerReport = ({ report, onLogCanon, onReRun }) => {
     const isDetectable = report?.detectableFromBill;
     const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 500 });
     const [isDragging, setIsDragging] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(false); // New State
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const reportRef = useRef(null);
 
@@ -87,55 +88,65 @@ export const ReviewerReport = ({ report, onLogCanon, onReRun }) => {
                     <h3 className="font-bold text-slate-800 text-sm">Truth Validity Report</h3>
                     <p className="text-xs text-slate-500">Phase 7: The Reviewer Agent</p>
                 </div>
-                <div className="text-slate-400">
-                    <GripHorizontal size={20} />
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className="text-slate-400 hover:text-slate-600 transition"
+                    >
+                        {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                    </button>
+                    <div className="text-slate-400 cursor-grab active:cursor-grabbing">
+                        <GripHorizontal size={20} />
+                    </div>
                 </div>
             </div>
 
             {/* Content */}
-            <div className="p-5 space-y-4">
+            {!isCollapsed && (
+                <div className="p-5 space-y-4">
 
-                {/* Detectability Status */}
-                <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${isDetectable ? 'text-amber-600' : 'text-slate-500'}`}>
-                    {isDetectable ? "⚠️ Detectable Error" : "🔒 Hidden / Context Dependent"}
-                </div>
+                    {/* Detectability Status */}
+                    <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${isDetectable ? 'text-amber-600' : 'text-slate-500'}`}>
+                        {isDetectable ? "⚠️ Detectable Error" : "🔒 Hidden / Context Dependent"}
+                    </div>
 
-                {/* Explanation */}
-                <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Analysis</span>
-                    <p className="text-sm text-slate-700 leading-relaxed">
-                        {report.explanation}
-                    </p>
-                </div>
-
-                {/* Missing Info */}
-                {report.missingInfo && report.missingInfo !== "N/A" && (
-                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1 text-blue-700">
-                            <Info size={14} />
-                            <span className="text-xs font-bold">Investigation Needs</span>
-                        </div>
-                        <p className="text-xs text-blue-800 italic">
-                            "{report.missingInfo}"
+                    {/* Explanation */}
+                    <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Analysis</span>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                            {report.explanation}
                         </p>
                     </div>
-                )}
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                    <button
-                        onClick={onReRun}
-                        className="flex-1 bg-amber-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-amber-700 transition flex items-center justify-center gap-2"
-                    >
-                        <span>🔄 Re-Run Analysis</span>
-                    </button>
-                    <button
-                        onClick={onLogCanon}
-                        className="flex-1 bg-slate-800 text-white text-xs font-bold py-2 rounded-lg hover:bg-slate-900 transition flex items-center justify-center gap-2"
-                    >
-                        <span>📝 Log It</span>
-                    </button>
+
+                    {/* Missing Info */}
+                    {report.missingInfo && report.missingInfo !== "N/A" && (
+                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <div className="flex items-center gap-2 mb-1 text-blue-700">
+                                <Info size={14} />
+                                <span className="text-xs font-bold">Investigation Needs</span>
+                            </div>
+                            <p className="text-xs text-blue-800 italic">
+                                "{report.missingInfo}"
+                            </p>
+                        </div>
+                    )}
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={onReRun}
+                            className="flex-1 bg-amber-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-amber-700 transition flex items-center justify-center gap-2"
+                        >
+                            <span>🔄 Re-Run Analysis</span>
+                        </button>
+                        <button
+                            onClick={onLogCanon}
+                            className="flex-1 bg-slate-800 text-white text-xs font-bold py-2 rounded-lg hover:bg-slate-900 transition flex items-center justify-center gap-2"
+                        >
+                            <span>📝 Log It</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
