@@ -71,13 +71,12 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
              * ER Facility -> **0450**
              * Clinic Facility -> **0510**
            
-           - **OFFICIAL DESCRIPTORS**: You MUST use the **Verbatim Official AMA CPT/HCPCS Description**. No paraphrasing or "billing-style" shorthand in the official_description field.
-           
-            - **CHARGEMASTER NOISE (BLOAT)**: 
-              * For High-Level visits, add 1-2 "Administrative" line items.
-              * **STRICT RULE**: Use **99070** (Supplies) or **HCPCS (Axxxx/Cxxxx)**. NEVER use an E/M code (992xx) for supplies.
-           
-           - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code with accurate units.
+            - **BILLING DESCRIPTION (REALISM)**: You MUST provide two description fields for every service:
+              1. **billing_description**: A concise, standard billing shorthand (e.g., "ED FACILITY LVL 5", "CMP", "CBC W/DIFF", "X-RAY CHEST 2VW", "INITIAL HOSP CARE"). This is what the patient sees.
+              2. **official_description**: The Verbatim Official AMA CPT/HCPCS Description (for auditing/compliance).
+              * **STRICT RULE**: The `billing_description` MUST NOT exceed 40 characters and should not contain technical clinical requirements (e.g., no "3 key components required").
+            
+            - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code with accurate units.
            
             // --- STANDARD NOMENCLATURE VALIDATION (V2026.3 Capstone) ---
             - **NOMENCLATURE MATCHING**: 
@@ -108,11 +107,11 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
             },
             // IF SPLIT (Hospital/ER):
             "facility_codes": [
-                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "official_description": "...", "type": "FACILITY_EM" },
-                 { "code": "85025", "billing_description": "CBC W/DIFF", "official_description": "...", "type": "LAB" }
+                 { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "FACILITY_EM" },
+                 { "code": "85025", "billing_description": "CBC W/DIFF", "official_description": "Blood count; complete (CBC), automated (Hgb, Hct, RBC, WBC and platelet count) and automated differential WBC count", "type": "LAB" }
             ],
             "professional_codes": [
-                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "official_description": "...", "type": "PRO_EM" }
+                 { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "PRO_EM" }
             ]
         }
     `;

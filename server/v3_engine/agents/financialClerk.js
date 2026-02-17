@@ -36,7 +36,7 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         If Billing Model is SPLIT BILL, you MUST return BOTH "facility_line_items" AND "professional_line_items".
         - **Facility Bill**: Should contain ALL technology, labs, pharmacy, and facility-mode E/M (Modifier -TC).
         - **Professional Bill**: Should contain the Physician's E/M (Modifier -26) and any procedures performed by the doctor.
-        - **DESCRIPTION REALISM**: For each item, use the `billing_description` provided in the input as the `description` for the final bill. DO NOT use the official_description.
+        - **DESCRIPTION REALISM**: For each item, use the \`billing_description\` provided in the input as the \`description\` for the final bill. DO NOT use the official_description.
         - **NEVER** leave "professional_line_items" empty if "facility_line_items" has an E/M code.
            
         **RETURN JSON**:
