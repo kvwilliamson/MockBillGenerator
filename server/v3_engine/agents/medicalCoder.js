@@ -80,11 +80,11 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
                - If Scenario/Instructions force Inpatient (9922x) -> Use **011x/012x** (Room & Board).
                - If SOS is ER (9928x) -> Use **0450**.
                - If SOS is Clinic (9920x-9921x) -> Use **0510**.
-           
             - **BILLING DESCRIPTION (REALISM)**: You MUST provide two description fields for every service:
               1. **billing_description**: A concise, standard billing shorthand (e.g., "ED FACILITY LVL 5", "CMP", "CBC W/DIFF", "X-RAY CHEST 2VW", "INITIAL HOSP CARE"). This is what the patient sees.
               2. **official_description**: The Verbatim Official AMA CPT/HCPCS Description (for auditing/compliance).
               * **STRICT RULE**: The \`billing_description\` MUST NOT exceed 40 characters and should not contain technical clinical requirements (e.g., no "3 key components required").
+              * **NO EXPLANATORY SUFFIXES**: DO NOT add "- TECHNICAL COMPONENT" or "- PROFESSIONAL COMPONENT" to the descriptions. The distinction is already made by the Revenue Code and CPT Modifier.
             
             - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code with accurate units.
            
@@ -122,7 +122,7 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
             ],
             "professional_codes": [
                  { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "type": "PRO_EM" },
-                 { "code": "00840", "billing_description": "ANESTHESIA MD", "type": "PRO_SURG", "quantity": 12 }
+                 { "code": "00840", "billing_description": "ANESTHESIA PHYSICIAN", "type": "PRO_SURG", "quantity": 12 }
             ],
             // IF GLOBAL (Single Bill):
             "line_items": [
