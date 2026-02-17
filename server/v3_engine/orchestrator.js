@@ -186,8 +186,37 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
 
         console.log("=== V3 ENGINE COMPLETE ===");
 
+        // Phase 16.2: Global Realism Scrub (Final Pass)
+        const finalScrub = (billObj) => {
+            if (!billObj || !billObj.bill_data || !billObj.bill_data.lineItems) return billObj;
+            const suffixes = [
+                /\s+FACILITY\b/gi, /\s+PROFESSIONAL\b/gi, /\s+TECHNICAL\b/gi,
+                /\s+PRO\b/gi, /\s+TECH\b/gi, /\s+COMPONENT\b/gi, /\s+COMP\b/gi,
+                /\s+PHYSICIAN\b/gi, /\s+PRACTITIONER\b/gi,
+                /\s*\-\s*FACILITY\b/gi, /\s*\-\s*PROFESSIONAL\b/gi,
+                /\s*\-\s*TECHNICAL\b/gi, /\s*\-\s*PRO\b/gi
+            ];
+            billObj.bill_data.lineItems = billObj.bill_data.lineItems.map(item => {
+                let d = item.description || '';
+                suffixes.forEach(regex => {
+                    d = d.replace(regex, '');
+                });
+                d = d.replace(/\s+/g, ' ').trim(); // Collapse spaces
+                return { ...item, description: d };
+            });
+            // Update subtotals/labels if necessary (descriptions only here)
+            return billObj;
+        };
+
+        if (billData.mode === 'SPLIT') {
+            billData.facilityBill = finalScrub(billData.facilityBill);
+            billData.professionalBill = finalScrub(billData.professionalBill);
+        } else {
+            billData.facilityBill = finalScrub(billData.facilityBill);
+        }
+
         return {
-            ...billData, // Spread: mode, facilityBill, professionalBill, (or bill_data if legacy)
+            ...billData, // Spread: mode, facilityBill, professionalBill
             review_report: reviewReport,
             clinical_truth: clinicalTruth,
             scenario_meta: scenario
