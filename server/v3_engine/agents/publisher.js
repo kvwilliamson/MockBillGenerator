@@ -98,7 +98,7 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
         if (financial.appliedPricingMode === 'AGB') {
             discountRate = 0.45; // Significant FMV discount
         } else if (financial.appliedPricingMode === 'GROSS' && payerType === 'Self-Pay') {
-            discountRate = 0.10; // Nominal "Self-Pay" courtesy discount for gross billing
+            discountRate = 0.00; // No discount for true Chargemaster/Gross billing
         }
         const adjAmount = (subtotal * discountRate).toFixed(2);
         const grandTotal = (subtotal - adjAmount).toFixed(2);
