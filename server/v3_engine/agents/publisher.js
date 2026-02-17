@@ -73,7 +73,12 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
     // Shared Header Info
     const payers = ["Blue Cross Blue Shield", "UnitedHealthcare", "Aetna", "Cigna", "Humana"];
     let insuranceName = payerType === 'Self-Pay' ? "Uninsured / Self-Pay" : payers[Math.floor(Math.random() * payers.length)];
-    let faStatus = payerType === 'Self-Pay' ? "**Status**: Financial Assistance Application Pending. (Gross Charges Applied)" : "";
+    let faStatus = "";
+    if (payerType === 'Self-Pay') {
+        faStatus = financial.appliedPricingMode === 'GROSS'
+            ? "**Status**: Financial Assistance Pending. Initial bill reflects full Chargemaster rates."
+            : "**Status**: Participating in Uninsured Market Rate Program (FMV Applied).";
+    }
     if (payerType === 'High-Deductible') insuranceName = `${insuranceName} (HDHP)`;
 
     // Shared MRN for both Facility and Professional (Patient Identity)
@@ -88,8 +93,13 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
 
         // 2. Financial Metrics
         const subtotal = total;
-        // Phase 9.2: Behavioral - Always show a discount for Self-Pay
-        const discountRate = financial.appliedPricingMode === 'AGB' ? 0.45 : (payerType === 'Self-Pay' ? 0.15 : 0.00);
+        // Phase 15: Deterministic Self-Pay Discounting
+        let discountRate = 0.00;
+        if (financial.appliedPricingMode === 'AGB') {
+            discountRate = 0.45; // Significant FMV discount
+        } else if (financial.appliedPricingMode === 'GROSS' && payerType === 'Self-Pay') {
+            discountRate = 0.10; // Nominal "Self-Pay" courtesy discount for gross billing
+        }
         const adjAmount = (subtotal * discountRate).toFixed(2);
         const grandTotal = (subtotal - adjAmount).toFixed(2);
 

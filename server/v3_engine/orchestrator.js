@@ -15,7 +15,7 @@ import { fetchMedicareRate, calculateBilledPrice } from '../pricing_core.js';
 /**
  * V3 ENGINE ORCHESTRATOR
  */
-export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-Pay', siteOfService = 'HOSPITAL_ED', ownershipType = 'HOSPITAL_OWNED', billingModel = 'SPLIT') {
+export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-Pay', chargeRate = 'FMV', siteOfService = 'HOSPITAL_ED', ownershipType = 'HOSPITAL_OWNED', billingModel = 'SPLIT') {
     console.log(`\n=== STARTING V3 ENGINE (Scenario ID: ${scenarioId}, Payer: ${payerType}) ===`);
 
     try {
@@ -48,17 +48,14 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
                 instructions.includes("full list price") ||
                 instructions.includes("no discount");
 
-            if (forcesChargemaster) {
-                console.log("[Orchestrator] Self-Pay: Forced to Chargemaster (8.0x) by scenario.");
+            if (forcesChargemaster || chargeRate === 'CHARGEMASTER') {
+                console.log("[Orchestrator] Self-Pay: Using CHARGEMASTER (8.0x) mode.");
                 effectivePayer = 'Self-Pay';
                 financialResult.appliedPricingMode = 'GROSS';
             } else {
-                // Phase 9.2: Behavioral Pricing - 50/50 Split but ALWAYS show some discount
-                const useChargemaster = Math.random() > 0.5;
-                effectivePayer = useChargemaster ? 'Self-Pay' : 'Self-Pay-FMV';
-                financialResult.appliedPricingMode = useChargemaster ? 'GROSS' : 'AGB';
-
-                console.log(`[Orchestrator] Self-Pay: Selected ${effectivePayer} (${financialResult.appliedPricingMode}) mode.`);
+                console.log("[Orchestrator] Self-Pay: Using FMV (AGB/Market) mode.");
+                effectivePayer = 'Self-Pay-FMV';
+                financialResult.appliedPricingMode = 'AGB';
             }
         }
 
