@@ -92,7 +92,7 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         const text = result.response.text();
         const data = parseAndValidateJSON(text);
 
-        console.log(`[V3 Phase 4] Financial Clerk: Priced items. Model: ${isSplit ? "SPLIT" : "GLOBAL"}`);
+        console.log(`[V3 Phase 4] Financial Clerk: Priced items. Model: ${billingModel}`);
 
         // Normalize Output - STRICLY ENFORCE billingModel parameter
         if (billingModel === 'GLOBAL') {
@@ -121,6 +121,14 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         }
     } catch (e) {
         console.error("Financial Clerk Failed", e);
-        return { type: "ERROR", line_items: [] };
+        // FORCE the requested structure even in error
+        if (billingModel === 'SPLIT' || billingModel === 'COMPONENT') {
+            return {
+                type: "SPLIT",
+                facility: { line_items: codedServices.facility_codes || [], total: 0 },
+                professional: { line_items: codedServices.professional_codes || [], total: 0 }
+            };
+        }
+        return { type: "GLOBAL", line_items: codedServices.line_items || [], total_billed: 0 };
     }
 }

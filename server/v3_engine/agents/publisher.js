@@ -84,9 +84,18 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
         const grandTotal = (subtotal - adjAmount).toFixed(2);
 
         // 3. Expert Identifiers
-        const tob = isPro ? "1500" : (admin.tob || "131");
+        const tob = isPro ? "1500" : (admin.tob || (siteOfService.includes('INPATIENT') ? "111" : "131"));
         const billType = isPro ? "CMS-1500" : (tob === "111" ? "0111 (Inpatient)" : "0131 (OP Hospital)");
-        const fcCode = payerType === 'Self-Pay' ? "FC: 01" : "FC: 05"; // Simplified FC mapping
+
+        // Generalize Financial Class mapping
+        const fcMap = {
+            'Self-Pay': 'FC: 01 (Uninsured)',
+            'Commercial': 'FC: 05 (PPO/HMO)',
+            'Medicare': 'FC: 10 (Medicare)',
+            'Medicaid': 'FC: 12 (Medicaid)',
+            'High-Deductible': 'FC: 06 (HDHP)'
+        };
+        const fcCode = fcMap[payerType] || "FC: 99 (Other)";
 
         return {
             bill_data: {
@@ -205,14 +214,15 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
     if (financial.type === "SPLIT") {
         const facBill = createBillObject(financial.facility.line_items, financial.facility.total, facility.name);
 
-        // SOS-specific Professional Names
-        let proProviderName = `Physician Services of ${facility.city}`;
-        if (scenario.careSetting?.includes('Imaging') || facility.name.includes('Imaging')) {
-            proProviderName = `Radiology Associates of ${facility.city}`;
-        } else if (scenario.careSetting?.includes('ER') || facility.name.includes('ER') || facility.name.includes('Hospital')) {
-            proProviderName = `Emergency Physicians of ${facility.city}`;
-        } else if (scenario.careSetting?.includes('Surgery') || facility.name.includes('Surgery') || facility.name.includes('ASC')) {
-            proProviderName = `Surgical Associates of ${facility.city}`;
+        // Generalized Professional Names based on Facility + Logic
+        const cleanFacName = facility.name.replace(/Hospital|Clinic|Center|Medical|Facility/g, '').trim();
+        let proProviderName = `${cleanFacName} Physician Services`;
+        if (scenario.careSetting?.includes('Imaging') || siteOfService.includes('IMAGING')) {
+            proProviderName = `${cleanFacName} Radiology Associates`;
+        } else if (scenario.careSetting?.includes('ER') || siteOfService.includes('ED')) {
+            proProviderName = `${cleanFacName} Emergency Physicians`;
+        } else if (scenario.careSetting?.includes('Surgery') || siteOfService.includes('SURGERY')) {
+            proProviderName = `${cleanFacName} Surgical Associates`;
         }
 
         const proBill = createBillObject(financial.professional.line_items, financial.professional.total, proProviderName, true);
