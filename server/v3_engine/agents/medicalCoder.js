@@ -21,7 +21,7 @@ try {
  * PHASE 3: THE MEDICAL CODER
  * Goal: Apply Codes based on Instructions (Hybrid AI/Constraint)
  */
-export async function generateMedicalCoder(model, clinicalTruth, scenario) {
+export async function generateMedicalCoder(model, clinicalTruth, scenario, siteOfService, billingModel) {
   // Inject Nomenclature into Prompt context
   const nomenclatureContext = STANDARD_NOMENCLATURE.length > 0
     ? JSON.stringify(STANDARD_NOMENCLATURE.slice(0, 50)) // Passing full list might be too big, pass key examples or rely on post-processing
@@ -31,27 +31,29 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
         
         **INPUTS**:
         - Clinical Record: ${JSON.stringify(clinicalTruth.encounter)}
-        - Care Setting: ${scenario.careSetting}
+        - SOS: ${siteOfService}
         
         **STRICT CODING INSTRUCTIONS (FROM BOSS)**:
         "${scenario.codingInstructions}"
         
         **TASK**:
         1. Assign ICD-10 Diagnosis Codes based on the clinical record.
-           - **DIAGNOSIS REALISM**: For High-Level E/M, use **High-Acuity Diagnoses** relevant to the **Care Setting**. (e.g. Clinic: 'Uncontrolled Chronic Condition'; ER: 'Acute Onset Pain'; Inpatient: 'Systemic Infection').
+           - **DIAGNOSIS REALISM**: For High-Level E/M, use **High-Acuity Diagnoses** relevant to the **Care Setting**.
         
         2. **CORE PROCEDURE**: Assign CPT Procedure Codes based on the **STRICT CODING INSTRUCTIONS**.
-           - **SPLIT BILLING RULE (CRITICAL)**: You are generating a **FACILITY BILL (UB-04)**.
-             * **NO PROFESSIONAL FEES**: Do NOT include Doctor/Physician fees (Modifier -26). The doctor bills separately.
-             * **FACILITY E/M ONLY**: The E/M Code (e.g. 99285) represents the **Facility Resource Use** (Room, Nursing), NOT the doctor's time.
-             * **NO TRIPLE BILLING**: Never list Global + Pro + Tech. List **ONLY** the Facility/Tech component.
+           - **SPLIT BILLING RULE (CRITICAL)**: You are generating the coding truth for a **SPLIT ENVIRONMENT**.
+             * **FACILITY TRACK**: Assign CPTs for facility resource use (Room, Nursing, Tech).
+             * **PROFESSIONAL TRACK**: Assign CPTs for Physician/Provider time (Interpretations, Surgery, MD E/M).
+             * **MANDATORY DUALITY**: For every E/M or Imaging code, you MUST provide BOTH a facility version AND a professional version in their respective arrays.
+             * **NO TRIPLE BILLING**: List **ONLY** the Facility/Tech component in the facility array and **ONLY** the Professional component in the professional array.
            
            - **BUNDLING RULE (CRITICAL)**: Unless the instructions explicitly say to "Unbundle" or "Explode" a code for the scenario, you must **BUNDLE** standard services according to NCCI edits.
-           - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the setting (e.g. 9928x for ER, 9920x/9921x for Clinic, 9922x for Inpatient). NEVER bill multiple E/M codes.
-           - **POST-2023 E/M RULES**: 
-             * **DEPRECATED**: Observation codes 99217, 99218, 99219, 99220 are NO LONGER IN USE. 
-             * For observation/inpatient, use 99221-99223 (Initial) or 99231-99233 (Subsequent).
-             * For Observation stays, you MUST include G0378 (Hourly Observation) with accurate units.
+            - **MUTUAL EXCLUSIVITY (NCCI)**: You must select **EXACTLY ONE** E/M Code appropriate for the SOS:
+              * **HOSPITAL_ED**: Use 99281-99285 (ED E/M).
+              * **HOSPITAL_INPATIENT**: Use 99221-99223 (Initial) or 99231-99233 (Subsequent).
+              * **HOSPITAL_OUTPATIENT / INDEPENDENT_OFFICE**: Use 99202-99215 (Clinic E/M).
+            - **POST-2023 E/M RULES**: 
+              * For Observation stays, you MUST include G0378 (Hourly Observation) with accurate units.
            
         3. **DERIVED SERVICES (AND DENSITY)**: Review the *entire* Clinical Record and assign CPT/HCPCS codes.
            - **ANCILLARY DENSITY (DETERMINISTIC)**:
@@ -70,11 +72,15 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
              * Observation (G0378) -> **0762**
              * ER Facility -> **0450**
              * Clinic Facility -> **0510**
+             * **SETTING SENSITIVITY**: Map the E/M revenue code to the **CLAIMED** care setting:
+               - If Scenario/Instructions force Inpatient (9922x) -> Use **011x/012x** (Room & Board).
+               - If SOS is ER (9928x) -> Use **0450**.
+               - If SOS is Clinic (9920x-9921x) -> Use **0510**.
            
             - **BILLING DESCRIPTION (REALISM)**: You MUST provide two description fields for every service:
               1. **billing_description**: A concise, standard billing shorthand (e.g., "ED FACILITY LVL 5", "CMP", "CBC W/DIFF", "X-RAY CHEST 2VW", "INITIAL HOSP CARE"). This is what the patient sees.
               2. **official_description**: The Verbatim Official AMA CPT/HCPCS Description (for auditing/compliance).
-              * **STRICT RULE**: The `billing_description` MUST NOT exceed 40 characters and should not contain technical clinical requirements (e.g., no "3 key components required").
+              * **STRICT RULE**: The \`billing_description\` MUST NOT exceed 40 characters and should not contain technical clinical requirements (e.g., no "3 key components required").
             
             - **PHARMACY LOGIC (J-CODES)**: If medications are administered, you MUST assign the correct J-Code with accurate units.
            
@@ -105,13 +111,17 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
                 "admission_source": "7",
                 "discharge_status": "01"
             },
-            // IF SPLIT (Hospital/ER):
+            // IF SPLIT (Hospital/ER) or COMPONENT:
             "facility_codes": [
                  { "code": "99285", "billing_description": "HC ED VISIT LVL 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "FACILITY_EM" },
                  { "code": "85025", "billing_description": "CBC W/DIFF", "official_description": "Blood count; complete (CBC), automated (Hgb, Hct, RBC, WBC and platelet count) and automated differential WBC count", "type": "LAB" }
             ],
             "professional_codes": [
                  { "code": "99285", "billing_description": "ED PHYSICIAN VISIT 5", "official_description": "Emergency department visit for the evaluation and management of a patient...", "type": "PRO_EM" }
+            ],
+            // IF GLOBAL (Single Bill):
+            "line_items": [
+                 { "code": "99214", "billing_description": "OFFICE VISIT LVL 4", "official_description": "Office or other outpatient visit..." }
             ]
         }
     `;
@@ -164,8 +174,8 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario) {
       aiData.professional_codes = proCodes;
     }
 
-    const count = aiData.cpt_codes ? aiData.cpt_codes.length : (aiData.facility_codes?.length || 0);
-    console.log(`[V3 Phase 3] Medical Coder: Assigned ${count} services. Mode: ${aiData.facility_codes ? 'SPLIT' : 'GLOBAL'}`);
+    const count = (aiData.facility_codes?.length || 0) + (aiData.professional_codes?.length || 0) + (aiData.line_items?.length || 0);
+    console.log(`[V3 Phase 3] Medical Coder: Assigned ${count} services. Model: ${billingModel}`);
     return aiData;
   } catch (error) {
     console.error("Medical Coder Failed (CRITICAL):", error);

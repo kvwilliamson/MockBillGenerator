@@ -201,10 +201,21 @@ export function generatePublisher(facility, clinical, coding, financial, scenari
     // 3. UB-04 Claim (Facility)
     // 4. CMS-1500 Claim (Professional)
 
-    // For now, we remain compatible with the current SPLIT/GLOBAL trigger but refine the output metadata.
+    // OUTPUT GENERATION
     if (financial.type === "SPLIT") {
         const facBill = createBillObject(financial.facility.line_items, financial.facility.total, facility.name);
-        const proBill = createBillObject(financial.professional.line_items, financial.professional.total, `Emergency Physicians of ${facility.city}`, true);
+
+        // SOS-specific Professional Names
+        let proProviderName = `Physician Services of ${facility.city}`;
+        if (scenario.careSetting?.includes('Imaging') || facility.name.includes('Imaging')) {
+            proProviderName = `Radiology Associates of ${facility.city}`;
+        } else if (scenario.careSetting?.includes('ER') || facility.name.includes('ER') || facility.name.includes('Hospital')) {
+            proProviderName = `Emergency Physicians of ${facility.city}`;
+        } else if (scenario.careSetting?.includes('Surgery') || facility.name.includes('Surgery') || facility.name.includes('ASC')) {
+            proProviderName = `Surgical Associates of ${facility.city}`;
+        }
+
+        const proBill = createBillObject(financial.professional.line_items, financial.professional.total, proProviderName, true);
 
         return {
             mode: "SPLIT",

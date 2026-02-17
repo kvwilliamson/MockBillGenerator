@@ -4,13 +4,13 @@ import { parseAndValidateJSON } from '../utils.js';
  * PHASE 2: THE CLINICAL ARCHITECT
  * Goal: Generate the Medical "Truth" (Medical Records & Context)
  */
-export async function generateClinicalArchitect(model, scenario, facility) {
+export async function generateClinicalArchitect(model, scenario, facility, siteOfService) {
     const prompt = `
         You are "The Clinical Architect". Your goal is to generate the CLINICAL TRUTH for a medical encounter.
         
         **CONTEXT**:
         - Facility: ${facility.name} (${facility.city}, ${facility.state})
-        - Care Setting: ${scenario.careSetting}
+        - SOS: ${siteOfService}
         - Description: ${scenario.description}
         - Narrative Rule: "${scenario.narrative}"
         

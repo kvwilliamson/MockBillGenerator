@@ -15,7 +15,7 @@ import { fetchMedicareRate, calculateBilledPrice } from '../pricing_core.js';
 /**
  * V3 ENGINE ORCHESTRATOR
  */
-export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-Pay') {
+export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-Pay', siteOfService = 'HOSPITAL_ED', ownershipType = 'HOSPITAL_OWNED', billingModel = 'SPLIT') {
     console.log(`\n=== STARTING V3 ENGINE (Scenario ID: ${scenarioId}, Payer: ${payerType}) ===`);
 
     try {
@@ -26,16 +26,16 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
         const randomSeed = Math.floor(Math.random() * 1000000);
 
         // PHASE 1: Facility Scout
-        const facilityData = await generateFacilityIdentity(genAI_Model, scenario.careSetting, randomSeed);
+        const facilityData = await generateFacilityIdentity(genAI_Model, siteOfService, ownershipType, randomSeed);
 
         // PHASE 2: Clinical Architect
-        const clinicalTruth = await generateClinicalArchitect(genAI_Model, scenario, facilityData);
+        const clinicalTruth = await generateClinicalArchitect(genAI_Model, scenario, facilityData, siteOfService);
 
         // PHASE 3: Medical Coder
-        const codingResult = await generateMedicalCoder(genAI_Model, clinicalTruth, scenario);
+        const codingResult = await generateMedicalCoder(genAI_Model, clinicalTruth, scenario, siteOfService, billingModel);
 
         // PHASE 4: Financial Clerk (AI selects codes and revenue codes)
-        const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData, payerType);
+        const financialResult = await generateFinancialClerk(genAI_Model, codingResult, scenario, facilityData, payerType, billingModel, siteOfService);
 
         // --- PHASE 4.5: Deterministic Pricing Hardening ---
         console.log('[Phase 4.5] Hardening Prices (Deterministic)...');
@@ -97,19 +97,28 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
             const end = dischargeDate ? parseD(dischargeDate) : start;
 
             return items.map(item => {
-                // If item has no date, default to Admit Date
-                if (!item.date) return { ...item, date: admitDate };
+                // Force Clean Date Format
+                let cleanDate = item.date;
+                if (cleanDate && cleanDate.includes('/')) {
+                    const parts = cleanDate.split('/');
+                    if (parts[2].length === 4) cleanDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                }
 
-                const d = parseD(item.date);
+                // If item has no date or invalid, default to Admit Date
+                if (!cleanDate) return { ...item, date: admitDate };
+
+                const d = parseD(cleanDate);
+                if (isNaN(d.getTime())) return { ...item, date: admitDate };
+
                 if (d < start) {
-                    // console.log(`[Temporal] Clamping PRE-ADMIT date ${item.date} -> ${admitDate}`);
+                    console.log(`[Temporal] Clamping PRE-ADMIT date ${item.date} -> ${admitDate}`);
                     return { ...item, date: admitDate };
                 }
                 if (d > end) {
-                    // console.log(`[Temporal] Clamping POST-DISCHARGE date ${item.date} -> ${dischargeDate}`);
+                    console.log(`[Temporal] Clamping POST-DISCHARGE date ${item.date} -> ${dischargeDate}`);
                     return { ...item, date: dischargeDate || admitDate };
                 }
-                return item;
+                return { ...item, date: cleanDate };
             });
         };
 
@@ -124,6 +133,18 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
         } else {
             financialResult.line_items = await hardenItems(financialResult.line_items);
             financialResult.line_items = clampDates(financialResult.line_items, clinicalTruth.encounter.admission_date, clinicalTruth.encounter.discharge_date);
+
+            // --- GLOBAL STRIP (V2026.9) ---
+            if (billingModel === 'GLOBAL') {
+                financialResult.line_items = financialResult.line_items.map(item => {
+                    const newItem = { ...item };
+                    delete newItem.rev_code;
+                    delete newItem.revCode;
+                    if (newItem.code) newItem.code = newItem.code.split('-')[0];
+                    return newItem;
+                });
+            }
+
             financialResult.total_billed = financialResult.line_items.reduce((s, i) => s + i.total_charge, 0);
         }
 
@@ -131,10 +152,10 @@ export async function generateV3Bill(genAI_Model, scenarioId, payerType = 'Self-
         let billData = generatePublisher(facilityData, clinicalTruth, codingResult, financialResult, scenario, payerType);
 
         // PHASE 6: Polish Agent
-        billData = await generatePolishAgent(genAI_Model, billData, scenario);
+        billData = await generatePolishAgent(genAI_Model, billData, scenario, siteOfService, billingModel);
 
         // PHASE 7: Reviewer
-        const reviewReport = await generateReviewer(genAI_Model, billData, clinicalTruth, codingResult, scenario);
+        const reviewReport = await generateReviewer(genAI_Model, billData, clinicalTruth, codingResult, scenario, siteOfService, billingModel);
 
         console.log("=== V3 ENGINE COMPLETE ===");
 

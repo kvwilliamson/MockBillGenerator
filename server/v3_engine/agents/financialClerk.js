@@ -1,6 +1,6 @@
 import { parseAndValidateJSON } from '../utils.js';
 
-export async function generateFinancialClerk(model, codedServices, scenario, facility, payerType) {
+export async function generateFinancialClerk(model, codedServices, scenario, facility, payerType, billingModel, siteOfService) {
     // DETECT SPLIT VS GLOBAL
     const isSplit = codedServices.facility_codes && codedServices.professional_codes;
 
@@ -10,7 +10,8 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
         **CONTEXT**:
         - Facility: ${facility.name} (${facility.facilityType})
         - Payer: ${payerType}
-        - Billing Model: ${isSplit ? "SPLIT BILL (Facility + Pro)" : "GLOBAL BILL"}
+        - SOS: ${siteOfService}
+        - Billing Model: ${billingModel}
         
         **INPUT CODES**:
         ${JSON.stringify(codedServices)}
@@ -32,12 +33,34 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
               
         3. **CHARGEMASTER STYLE**: Provide "uneven" unit prices for realism.
         
-        **CRITICAL - SPLIT BILLING**: 
-        If Billing Model is SPLIT BILL, you MUST return BOTH "facility_line_items" AND "professional_line_items".
-        - **Facility Bill**: Should contain ALL technology, labs, pharmacy, and facility-mode E/M (Modifier -TC).
-        - **Professional Bill**: Should contain the Physician's E/M (Modifier -26) and any procedures performed by the doctor.
-        - **DESCRIPTION REALISM**: For each item, use the \`billing_description\` provided in the input as the \`description\` for the final bill. DO NOT use the official_description.
-        - **NEVER** leave "professional_line_items" empty if "facility_line_items" has an E/M code.
+        **CRITICAL - ELITE SPLITTING RULES**: 
+        If Billing Model is SPLIT (or COMPONENT), you MUST return BOTH "facility_line_items" AND "professional_line_items".
+        
+        1. **Facility Bill (Institutional)**:
+           - MUST use Revenue Codes for EVERY line item.
+           - Includes: Room/Board, Observation Hours, Trauma Fees, Supplies/Implants, Pharmacy, Tech Components (-TC).
+           - **Facility E/M**: Use the appropriate Revenue Code for the **CLAIMED** setting (e.g., 0110 for Inpatient, 0450 for ER).
+           - **NEVER** use Modifier -26 on the facility bill.
+           - **MANDATORY**: At least ONE facility-tracked service must be here if model is SPLIT.
+                   2. **Professional Bill (Physician)**:
+           - MUST NOT use Revenue Codes (Exception: 0960/0981 for internal tracking ONLY if needed, but stripped in final).
+           - Includes: Physician E/M (99285, 99214, etc.), Surgeon fees, Anesthesia, Interpretations (-26).
+           - **NEVER** use institutional Revenue Codes (01xx, 04xx, 02xx) on the professional bill.
+           - **MANDATORY**: At least ONE professional-tracked service must be here if model is SPLIT.
+
+        3. **Imaging (COMPONENT Logic)**:
+           - If model is COMPONENT, you MUST split Imaging (7xxxx) or Cardiology (93xxx) into Technical (-TC on Facility) and Professional (-26 on Pro).
+
+        4. **Setting-Specific Requirements**:
+           - **Inpatient**: If SPLIT, require Rev 010x (Room & Board) on facility.
+           - **ER**: If SPLIT, require Rev 045x (ED Facility) on facility.
+           - **ASC**: If SPLIT, require OR Rev Codes (036x) and Surgical CPTs.
+           - **Observation**: If Observation, require Rev 0762.
+           - **ICU**: If ICU, require Rev 020x.
+
+        5. **Global Model Validation**:
+           - If billingModel is GLOBAL, return a SINGLE list of "line_items".
+           - NO revenue codes, NO -26, and NO -TC allowed in GLOBAL mode.
            
         **RETURN JSON**:
         {
@@ -71,24 +94,29 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
 
         console.log(`[V3 Phase 4] Financial Clerk: Priced items. Model: ${isSplit ? "SPLIT" : "GLOBAL"}`);
 
-        // Normalize Output
-        if (data.facility_line_items) {
+        // Normalize Output - STRICLY ENFORCE billingModel parameter
+        if (billingModel === 'GLOBAL') {
+            const allItems = [
+                ...(data.line_items || []),
+                ...(data.facility_line_items || []),
+                ...(data.professional_line_items || [])
+            ];
+            return {
+                type: "GLOBAL",
+                line_items: allItems,
+                total_billed: allItems.reduce((s, i) => s + (i.total_charge || 0), 0)
+            };
+        } else {
             return {
                 type: "SPLIT",
                 facility: {
-                    line_items: data.facility_line_items,
-                    total: data.facility_line_items.reduce((s, i) => s + (i.total_charge || 0), 0)
+                    line_items: data.facility_line_items || data.line_items || [],
+                    total: (data.facility_line_items || data.line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
                 },
                 professional: {
                     line_items: data.professional_line_items || [],
                     total: (data.professional_line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
                 }
-            };
-        } else {
-            return {
-                type: "GLOBAL",
-                line_items: data.line_items || [],
-                total_billed: (data.line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
             };
         }
     } catch (e) {

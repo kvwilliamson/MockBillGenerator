@@ -1674,13 +1674,13 @@ app.post('/generate-data-v2', async (req, res) => {
 // --- V3 ENDPOINT (CANONICAL BILLS) ---
 app.post('/generate-data-v3', async (req, res) => {
     try {
-        const { scenarioId, payerType } = req.body;
-        console.log(`[V3 Request] Generating Scenario ID: ${scenarioId} | Payer: ${payerType}`);
+        const { scenarioId, payerType, siteOfService, ownershipType, billingModel } = req.body;
+        console.log(`[V3 Request] Scenario: ${scenarioId} | SOS: ${siteOfService} | Ownership: ${ownershipType} | Model: ${billingModel}`);
 
         // Pass the initialized genAI model to the orchestrator
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-        const v3Result = await generateV3Bill(model, scenarioId, payerType);
+        const v3Result = await generateV3Bill(model, scenarioId, payerType, siteOfService, ownershipType, billingModel);
         res.json(v3Result);
     } catch (error) {
         console.error('[V3 Error]', error);

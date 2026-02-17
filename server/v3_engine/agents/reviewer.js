@@ -4,7 +4,7 @@ import { parseAndValidateJSON } from '../utils.js';
  * PHASE 7: THE REVIEWER
  * Goal: Truth Validity Analysis (Popup Report)
  */
-export async function generateReviewer(model, finalBillData, clinicalTruth, codingTruth, scenario) {
+export async function generateReviewer(model, finalBillData, clinicalTruth, codingTruth, scenario, siteOfService, billingModel) {
     // ADAPTIVE REVIEW: Handle Split vs Global
     const billData = finalBillData; // Rename for clarity based on new logic
 
@@ -43,6 +43,8 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         You are "The Internal Auditor". Your job is to double-check the bill before it goes out.
         
         **SCENARIO**: "${scenario.scenarioName}"
+        **SOS**: "${siteOfService}"
+        **BILLING MODEL**: "${billingModel}"
         **INTENDED ERROR**: "${scenario.description}"
         **NARRATIVE TRUTH**: "${scenario.narrative}"
         
@@ -55,6 +57,11 @@ export async function generateReviewer(model, finalBillData, clinicalTruth, codi
         
         **TASK**:
         Generate a "Review Report" that explains WHY this bill is incorrect based on the clinical truth.
+        
+        **AUDIT RULES (ELITE REALISM)**:
+        1. **Split Accuracy**: If SPLIT mode, ensure NO professional interpretation fees (Modifier -26) are on the Facility bill, and NO institutional revenue codes (0450, 0110, etc.) are on the Professional bill.
+        2. **Global Integrity**: If GLOBAL mode, ensure NO revenue codes or split-modifiers are present.
+        3. **Clinical Leakage**: Check if items billed on one entity are supportable by the clinical record provided.
         
         ** RETURN JSON **:
     {

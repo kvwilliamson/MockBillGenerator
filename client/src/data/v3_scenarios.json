@@ -3,210 +3,405 @@
         "id": "1",
         "label": "ER E/M Level Inflation",
         "description": "ER visit billed at Level 5 without supporting complexity",
-        "narrative": "Patient presents to the ER with mild chest discomfort. Vitals stable, ECG performed."
+        "narrative": "Patient presents to the ER with mild chest discomfort. Vitals stable, ECG performed.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "URGENT_CARE_HOSPITAL",
+            "URGENT_CARE_INDEPENDENT"
+        ]
     },
     {
         "id": "2",
         "label": "Trauma Activation Abuse",
         "description": "Trauma activation fee billed without trauma criteria",
-        "narrative": "Minor fall at home; patient brought to trauma center. No major injuries."
+        "narrative": "Minor fall at home; patient brought to trauma center. No major injuries.",
+        "allowedSites": [
+            "HOSPITAL_ED"
+        ]
     },
     {
         "id": "3",
         "label": "Observation → Inpatient Inflation",
         "description": "Observation stay billed as inpatient admission",
-        "narrative": "Patient admitted overnight for dehydration. Doctor notes fluids and vitals monitoring."
+        "narrative": "Patient admitted overnight for dehydration. Doctor notes fluids and vitals monitoring.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_ED"
+        ]
     },
     {
         "id": "4",
         "label": "ICU Level Inflation",
         "description": "ICU room charges without ICU-level services",
-        "narrative": "Patient monitored on general ward post-op; no ICU care required."
+        "narrative": "Patient monitored on general ward post-op; no ICU care required.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT"
+        ]
     },
     {
         "id": "5",
         "label": "Surgical Unbundling",
         "description": "Bundled surgical services billed separately",
-        "narrative": "Laparoscopic appendectomy performed; surgery, anesthesia, closure documented."
+        "narrative": "Laparoscopic appendectomy performed; surgery, anesthesia, closure documented.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "6",
         "label": "Lab Panel Fragmentation",
         "description": "Lab panels split into individual tests",
-        "narrative": "Routine metabolic panel ordered; lab reports sodium, potassium, creatinine, glucose."
+        "narrative": "Routine metabolic panel ordered; lab reports sodium, potassium, creatinine, glucose.",
+        "allowedSites": [
+            "INDEPENDENT_LAB",
+            "HOSPITAL_OUTPATIENT",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "7",
         "label": "Radiology Component Fragmentation",
         "description": "Technical and professional components fragmented",
-        "narrative": "Abdominal CT with contrast; radiologist performs reading and tech work."
+        "narrative": "Abdominal CT with contrast; radiologist performs reading and tech work.",
+        "allowedSites": [
+            "FREESTANDING_IMAGING",
+            "HOSPITAL_OUTPATIENT",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "8",
         "label": "ER Charge Stacking",
         "description": "Routine ER services billed à la carte",
-        "narrative": "Minor laceration treated in ER; basic exam and dressing."
+        "narrative": "Minor laceration treated in ER; basic exam and dressing.",
+        "allowedSites": [
+            "HOSPITAL_ED"
+        ]
     },
     {
         "id": "9",
         "label": "Modifier -25 Abuse",
         "description": "E/M billed with minor procedure using -25",
-        "narrative": "Routine office visit plus minor wart removal."
+        "narrative": "Routine office visit plus minor wart removal.",
+        "allowedSites": [
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "URGENT_CARE_INDEPENDENT",
+            "URGENT_CARE_HOSPITAL"
+        ]
     },
     {
         "id": "10",
         "label": "Modifier -59 Abuse",
         "description": "Modifier used to bypass bundling edits",
-        "narrative": "Multiple injections during same visit."
+        "narrative": "Multiple injections during same visit.",
+        "allowedSites": [
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "11",
         "label": "Anesthesia Time Padding",
         "description": "Anesthesia time exceeds OR duration",
-        "narrative": "Knee arthroscopy with general anesthesia."
+        "narrative": "Knee arthroscopy with general anesthesia.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "12",
         "label": "Observation Hour Inflation",
         "description": "Observation billed at excessive hours",
-        "narrative": "Overnight observation for mild asthma exacerbation."
+        "narrative": "Overnight observation for mild asthma exacerbation.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_OUTPATIENT",
+            "HOSPITAL_INPATIENT"
+        ]
     },
     {
         "id": "13",
         "label": "OR / PACU Time Overstatement",
         "description": "Operating and recovery time overstated",
-        "narrative": "Knee arthroscopy; surgery 45 min, PACU 30 min."
+        "narrative": "Knee arthroscopy; surgery 45 min, PACU 30 min.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "14",
         "label": "Drug Unit Overbilling",
         "description": "Drug units exceed standard dosing",
-        "narrative": "IV antibiotic given 2 doses."
+        "narrative": "IV antibiotic given 2 doses.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "15",
         "label": "Supply Quantity Inflation",
         "description": "Excess supply quantities billed",
-        "narrative": "Patient receives 3 wound dressings."
+        "narrative": "Patient receives 3 wound dressings.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "16",
         "label": "Duplicate CPT Billing",
         "description": "Same CPT billed twice same date",
-        "narrative": "Single radiograph performed once."
+        "narrative": "Single radiograph performed once.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "FREESTANDING_IMAGING",
+            "INDEPENDENT_LAB",
+            "URGENT_CARE_INDEPENDENT",
+            "URGENT_CARE_HOSPITAL"
+        ]
     },
     {
         "id": "17",
         "label": "Ghost (Phantom) Services",
         "description": "Services billed but never rendered",
-        "narrative": "Physical therapy consult ordered but not performed."
+        "narrative": "Physical therapy consult ordered but not performed.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "URGENT_CARE_INDEPENDENT",
+            "URGENT_CARE_HOSPITAL"
+        ]
     },
     {
         "id": "18",
         "label": "Late-Posted Charges",
         "description": "Charges added after discharge",
-        "narrative": "Patient discharged; later lab results posted."
+        "narrative": "Patient discharged; later lab results posted.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "HOSPITAL_ED"
+        ]
     },
     {
         "id": "19",
         "label": "Assistant Surgeon Abuse",
         "description": "Assistant surgeon billed without support",
-        "narrative": "Appendectomy with surgical assistant present."
+        "narrative": "Appendectomy with surgical assistant present.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "20",
         "label": "Anesthesia Direction Abuse",
         "description": "Medical direction billed improperly",
-        "narrative": "Anesthesia supervised by anesthesiologist but performed by resident."
+        "narrative": "Anesthesia supervised by anesthesiologist but performed by resident.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "21",
         "label": "Outpatient Facility Fee Abuse",
         "description": "Facility fee added to clinic visit",
-        "narrative": "Routine outpatient clinic visit."
+        "narrative": "Routine outpatient clinic visit.",
+        "allowedSites": [
+            "HOSPITAL_OWNED_CLINIC",
+            "HOSPITAL_OUTPATIENT"
+        ]
     },
     {
         "id": "22",
         "label": "Place-of-Service Inflation",
         "description": "Hospital POS used for routine care",
-        "narrative": "Telehealth follow-up incorrectly coded as in-clinic."
+        "narrative": "Telehealth follow-up incorrectly coded as in-clinic.",
+        "allowedSites": [
+            "HOSPITAL_OWNED_CLINIC",
+            "INDEPENDENT_OFFICE"
+        ]
     },
     {
         "id": "23",
         "label": "J-Code Markup Abuse",
         "description": "Injectable drugs billed far above cost",
-        "narrative": "IV chemotherapy administered."
+        "narrative": "IV chemotherapy administered.",
+        "allowedSites": [
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "HOSPITAL_OUTPATIENT"
+        ]
     },
     {
         "id": "24",
         "label": "Oral Med Inpatient Pricing",
         "description": "Common oral meds billed at IP rates",
-        "narrative": "Inpatient oral antibiotics."
+        "narrative": "Inpatient oral antibiotics.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT"
+        ]
     },
     {
         "id": "25",
         "label": "No Self-Pay Discount",
         "description": "Full chargemaster pricing applied",
-        "narrative": "Patient paying cash."
+        "narrative": "Patient paying cash.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "FREESTANDING_IMAGING",
+            "INDEPENDENT_LAB",
+            "URGENT_CARE_INDEPENDENT",
+            "URGENT_CARE_HOSPITAL"
+        ]
     },
     {
         "id": "26",
         "label": "Cash-Pay Rate Inversion",
         "description": "Self-pay charged more than insurers",
-        "narrative": "Self-pay patient; negotiated insurance rate lower."
+        "narrative": "Self-pay patient; negotiated insurance rate lower.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "FREESTANDING_IMAGING",
+            "INDEPENDENT_LAB",
+            "URGENT_CARE_INDEPENDENT",
+            "URGENT_CARE_HOSPITAL"
+        ]
     },
     {
         "id": "27",
         "label": "No Surprises Act Violation",
         "description": "OON ancillary billing in protected care",
-        "narrative": "Out-of-network imaging in emergency."
+        "narrative": "Out-of-network imaging in emergency.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_OUTPATIENT",
+            "FREESTANDING_IMAGING"
+        ]
     },
     {
         "id": "28",
         "label": "GFE Overrun",
         "description": "Final bill exceeds GFE by >$400",
-        "narrative": "Patient received GFE $500 for knee MRI; actual $900."
+        "narrative": "Patient received GFE $500 for knee MRI; actual $900.",
+        "allowedSites": [
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     },
     {
         "id": "29",
         "label": "Revenue Code Misclassification",
         "description": "Incorrect revenue code inflates charges",
-        "narrative": "Infusion administered in outpatient clinic."
+        "narrative": "Infusion administered in outpatient clinic.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "30",
         "label": "Preventive → Diagnostic Misbilling",
         "description": "Preventive care billed as diagnostic",
-        "narrative": "Annual wellness visit performed; preventive documented."
+        "narrative": "Annual wellness visit performed; preventive documented.",
+        "allowedSites": [
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "31",
         "label": "Length-of-Stay Padding",
         "description": "Extra inpatient days without services",
-        "narrative": "Patient admitted 2 nights for mild pneumonia."
+        "narrative": "Patient admitted 2 nights for mild pneumonia.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT"
+        ]
     },
     {
         "id": "32",
         "label": "Supply Kit Double Billing",
         "description": "Kit billed plus individual components",
-        "narrative": "Wound kit used for dressing change."
+        "narrative": "Wound kit used for dressing change.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER",
+            "INDEPENDENT_OFFICE",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "33",
         "label": "Tech / Prof Duplicate Imaging",
         "description": "Both components billed redundantly",
-        "narrative": "X-ray read by radiologist; technical component billed twice."
+        "narrative": "X-ray read by radiologist; technical component billed twice.",
+        "allowedSites": [
+            "FREESTANDING_IMAGING",
+            "HOSPITAL_OUTPATIENT",
+            "HOSPITAL_OWNED_CLINIC"
+        ]
     },
     {
         "id": "34",
         "label": "Max Observation Edge Case",
         "description": "Observation billed at upper limit",
-        "narrative": "Patient observed 23 hours for mild dehydration."
+        "narrative": "Patient observed 23 hours for mild dehydration.",
+        "allowedSites": [
+            "HOSPITAL_ED",
+            "HOSPITAL_OUTPATIENT"
+        ]
     },
     {
         "id": "35",
         "label": "Disposable Device Markup",
         "description": "Single-use device billed at extreme rate",
-        "narrative": "Single-use orthopedic device administered."
+        "narrative": "Single-use orthopedic device administered.",
+        "allowedSites": [
+            "HOSPITAL_INPATIENT",
+            "HOSPITAL_OUTPATIENT",
+            "AMBULATORY_SURGERY_CENTER"
+        ]
     }
 ]

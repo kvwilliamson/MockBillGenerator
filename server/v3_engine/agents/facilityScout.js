@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
  * PHASE 1: THE FACILITY SCOUT (V2026.3 Capstone)
  * Goal: Anchor to Verified Data (Single Source of Truth).
  */
-export async function generateFacilityIdentity(model, specialty, randomSeed) {
+export async function generateFacilityIdentity(model, siteOfService, ownershipType, randomSeed) {
 
     // 1. Try to load Verified Facilities
     let verifiedFacilities = [];
@@ -54,10 +54,11 @@ export async function generateFacilityIdentity(model, specialty, randomSeed) {
         You are "The Facility Scout". Your task is to select a REAL, EXISTING medical facility in the United States that matches the requested specialty.
         
         **RANDOM SEED**: ${randomSeed}
-        **SPECIALTY**: "${specialty}"
+        **SITE OF SERVICE**: "${siteOfService}"
+        **OWNERSHIP**: "${ownershipType}"
         
         **STRICT REALISM RULES**:
-        1. Select a random US state and then pick a REAL medical facility within that state.
+        1. Select a random US state and then pick a REAL medical facility within that state that logically matches the Site of Service (e.g. if SOS=HOSPITAL_ED, select a real Hospital).
         2. Provide the EXACT real-world name and physical address.
         3. **GEOGRAPHIC CONSISTENCY**: The ZIP code MUST match the City and State. 
         4. Do NOT provide fake names or placeholders (like "Metropolis General" or "555-XXXX").
@@ -66,13 +67,14 @@ export async function generateFacilityIdentity(model, specialty, randomSeed) {
         
         **RETURN JSON**:
         {
-            "name": "Exact Real Hospital Name",
+            "name": "Exact Real Hospital/Clinic Name",
             "address": "Real Street Address",
             "city": "Real City",
             "state": "Real ST",
             "zip": "XXXXX",
-            "facilityType": "Corporate Hospital / Private Practice / ASC",
-            "billingModel": "Split / Global" // Hospital = Split. Private Practice = Global.
+            "facilityType": "${siteOfService}",
+            "ownership": "${ownershipType}",
+            "billingModel": "Split / Global" // Based on Ownership and SOS.
         }
     `;
 
