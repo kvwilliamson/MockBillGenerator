@@ -42,10 +42,12 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
            - **Facility E/M**: Use the appropriate Revenue Code for the **CLAIMED** setting (e.g., 0110 for Inpatient, 0450 for ER).
            - **NEVER** use Modifier -26 on the facility bill.
            - **MANDATORY**: At least ONE facility-tracked service must be here if model is SPLIT.
+           - **LABS**: Standard labs (80000-87999) STAY here. They do NOT go to Pro.
                    2. **Professional Bill (Physician)**:
            - MUST NOT use Revenue Codes (Exception: 0960/0981 for internal tracking ONLY if needed, but stripped in final).
            - Includes: Physician E/M (99285, 99214, etc.), Surgeon fees, Anesthesia, Interpretations (-26).
-           - **NEVER** use institutional Revenue Codes (01xx, 04xx, 02xx) on the professional bill.
+           - **NEVER** use institutional Revenue Codes (01xx, 04xx, 02xx, 03xx) on the professional bill.
+           - **LABS**: Do NOT include standard technical lab fees (8xxxx) here.
            - **MANDATORY**: At least ONE professional-tracked service must be here if model is SPLIT.
 
         3. **Imaging (COMPONENT Logic)**:
@@ -107,15 +109,31 @@ export async function generateFinancialClerk(model, codedServices, scenario, fac
                 total_billed: allItems.reduce((s, i) => s + (i.total_charge || 0), 0)
             };
         } else {
+            // Post-Processing: Re-enforce modifiers if lost by AI and clean Labs
+            const cleanItems = (items, suffix) => {
+                return items.map(item => {
+                    let code = String(item.code || '');
+                    // Re-apply modifier if it's an E/M, Imaging, or Cardiology code and missing a modifier
+                    if ((code.startsWith('99') || code.startsWith('7') || code.startsWith('93')) && !code.includes('-')) {
+                        console.log(`[Clerk Clean] Re-applying ${suffix} to ${code}`);
+                        item.code = `${code}${suffix}`;
+                    }
+                    return item;
+                });
+            };
+
+            const facItems = cleanItems(data.facility_line_items || data.line_items || [], '-TC');
+            const proItems = cleanItems(data.professional_line_items || [], '-26');
+
             return {
                 type: "SPLIT",
                 facility: {
-                    line_items: data.facility_line_items || data.line_items || [],
-                    total: (data.facility_line_items || data.line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
+                    line_items: facItems,
+                    total: facItems.reduce((s, i) => s + (i.total_charge || 0), 0)
                 },
                 professional: {
-                    line_items: data.professional_line_items || [],
-                    total: (data.professional_line_items || []).reduce((s, i) => s + (i.total_charge || 0), 0)
+                    line_items: proItems,
+                    total: proItems.reduce((s, i) => s + (i.total_charge || 0), 0)
                 }
             };
         }

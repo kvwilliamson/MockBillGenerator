@@ -42,9 +42,11 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
         
         2. **CORE PROCEDURE**: Assign CPT Procedure Codes based on the **STRICT CODING INSTRUCTIONS**.
            - **SPLIT BILLING RULE (CRITICAL)**: You are generating the coding truth for a **SPLIT ENVIRONMENT**.
-             * **FACILITY TRACK**: Assign CPTs for facility resource use (Room, Nursing, Tech).
-             * **PROFESSIONAL TRACK**: Assign CPTs for Physician/Provider time (Interpretations, Surgery, MD E/M).
+             * **FACILITY TRACK**: Assign CPTs for facility resource use (Room, Nursing, Tech, Standard Labs).
+             * **PROFESSIONAL TRACK**: Assign CPTs for Physician/Provider time (Interpretations, Surgery, MD E/M, Pathology Interpretations).
              * **MANDATORY DUALITY**: For every E/M or Imaging code, you MUST provide BOTH a facility version AND a professional version in their respective arrays.
+             * **LAB RULE (CRITICAL)**: Standard Laboratory codes (80000-87999) are **FACILITY ONLY**. DO NOT duplicate them in the professional array.
+             * **PATHOLOGY EXCEPTION**: Surgical Pathology (88300-88399) IS a dual component and should be in BOTH arrays.
              * **NO TRIPLE BILLING**: List **ONLY** the Facility/Tech component in the facility array and **ONLY** the Professional component in the professional array.
            
              * **SURGICAL REALISM (v2026.11)**: If OR/Surgery is performed (Rev 036x), you MUST assign:
@@ -162,7 +164,8 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
         }
         cpt = code.code;
 
-        // 1. Enforce -TC on Facility E/M and Shared Items
+        // 1. Enforce -TC on Facility E/M and Shared Items (Excluding Labs)
+        const isLab = cpt.startsWith('8') && !cpt.startsWith('883');
         if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-TC';
         }
@@ -178,7 +181,23 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
       });
 
       // 3. Enforce -26 on Professional E/M and Shared Items
-      proCodes.forEach(code => {
+      // 4. DEDUPLICATION PASS: Remove non-pathology labs that accidentally leaked into Pro array
+      const filteredProCodes = proCodes.filter(proCode => {
+        const proCpt = proCode.code || '';
+        const isStandardLab = proCpt.startsWith('8') && !proCpt.startsWith('883');
+        
+        if (isStandardLab) {
+            // Check if it exists in Facility
+            const existsInFac = facCodes.some(f => (f.code || '').startsWith(proCpt.substring(0, 5)));
+            if (existsInFac) {
+                console.log(`[Coder Clean] Removing duplicate standard lab ${proCpt} from Professional Track.`);
+                return false;
+            }
+        }
+        return true;
+      });
+
+      filteredProCodes.forEach(code => {
         const cpt = code.code || '';
         if ((cpt.startsWith('99') || cpt.startsWith('7') || cpt.startsWith('93')) && !cpt.includes('-')) {
           code.code += '-26';
@@ -187,7 +206,7 @@ export async function generateMedicalCoder(model, clinicalTruth, scenario, siteO
       });
 
       aiData.facility_codes = facCodes;
-      aiData.professional_codes = proCodes;
+      aiData.professional_codes = filteredProCodes;
     }
 
     const count = (aiData.facility_codes?.length || 0) + (aiData.professional_codes?.length || 0) + (aiData.line_items?.length || 0);
