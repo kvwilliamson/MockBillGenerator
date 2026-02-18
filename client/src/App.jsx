@@ -190,7 +190,7 @@ function App() {
         setViewMode('BILL');
 
         try {
-            const response = await axios.post('http://localhost:4000/generate-data-v3', {
+            const response = await axios.post('http://127.0.0.1:4000/generate-data-v3', {
                 scenarioId: selectedScenarioId,
                 payerType: v3PayerType,
                 chargeRate: v3ChargeRate,
@@ -241,7 +241,7 @@ function App() {
 
     const handleFetchBills = async () => {
         try {
-            const res = await axios.get('http://localhost:4000/list-bills');
+            const res = await axios.get('http://127.0.0.1:4000/list-bills');
             setFileList(res.data.files || []);
             setShowFileModal(true);
         } catch (err) {
@@ -284,7 +284,7 @@ function App() {
         };
 
         try {
-            await axios.post('http://localhost:4000/save-bill', payload);
+            await axios.post('http://127.0.0.1:4000/save-bill', payload);
             alert("Bill Saved Successfully!");
         } catch (err) {
             console.error(err);
@@ -294,7 +294,7 @@ function App() {
 
     const handleLoadBill = async (filename) => {
         try {
-            const res = await axios.post('http://localhost:4000/load-bill', { filename });
+            const res = await axios.post('http://127.0.0.1:4000/load-bill', { filename });
             const d = res.data.data;
 
             // Restore State
@@ -328,7 +328,7 @@ function App() {
 
         try {
             // alert("Starting Re-Analysis..."); // Optional feedback
-            const response = await axios.post('http://localhost:4000/rerun-analysis', {
+            const response = await axios.post('http://127.0.0.1:4000/rerun-analysis', {
                 billText,
                 scenarioName: meta.scenarioName || "Unknown",
                 description: meta.description || "N/A",
@@ -363,7 +363,7 @@ function App() {
         `.trim();
 
         try {
-            await axios.post('http://localhost:4000/log-canon-entry', {
+            await axios.post('http://127.0.0.1:4000/log-canon-entry', {
                 filename: fileNameBase,
                 scenario: generatedData.scenario_meta?.scenarioName || "Unknown",
                 description: generatedData.scenario_meta?.description || "N/A",
@@ -390,7 +390,7 @@ function App() {
         setModifiedHtml(null);
         setViewMode('BILL');
         try {
-            const response = await axios.post('http://localhost:4000/generate-data-v2', {
+            const response = await axios.post('http://127.0.0.1:4000/generate-data-v2', {
                 errorType,
                 specialty,
                 complexity,
@@ -411,7 +411,7 @@ function App() {
         if (!generatedData) return;
         setLoading(true);
         try {
-            const response = await axios.post('http://localhost:4000/generate-gfe', {
+            const response = await axios.post('http://127.0.0.1:4000/generate-gfe', {
                 bill_data: generatedData.bill_data
             });
             setGfeData(response.data);
@@ -427,7 +427,7 @@ function App() {
         if (!generatedData) return;
         setLoading(true);
         try {
-            const response = await axios.post('http://localhost:4000/generate-mr', {
+            const response = await axios.post('http://127.0.0.1:4000/generate-mr', {
                 bill_data: generatedData.bill_data
             });
             setMrData(response.data);
@@ -442,7 +442,7 @@ function App() {
     const handleDeepDive = async () => {
         if (!generatedData) return null;
         try {
-            const response = await axios.post('http://localhost:4000/deep-dive-analysis', {
+            const response = await axios.post('http://127.0.0.1:4000/deep-dive-analysis', {
                 bill_data: generatedData.bill_data,
                 specialty,
                 errorType,
@@ -463,7 +463,7 @@ function App() {
     const handleSupplementalAudit = async (existingIssues) => {
         if (!generatedData) return;
         try {
-            const response = await axios.post('http://localhost:4000/supplemental-audit', {
+            const response = await axios.post('http://127.0.0.1:4000/supplemental-audit', {
                 bill_data: generatedData.bill_data,
                 existing_issues: existingIssues || []
             });
@@ -478,7 +478,7 @@ function App() {
         if (!generatedData) return;
         setLoading(true);
         try {
-            const response = await axios.post('http://localhost:4000/analyze-bill', {
+            const response = await axios.post('http://127.0.0.1:4000/analyze-bill', {
                 bill_data: generatedData.bill_data,
                 errorType: errorType,
                 gfe_data: gfeData,
@@ -657,7 +657,7 @@ DO NOT modify logic unless a clear gap is found.
         `;
 
             try {
-                const response = await axios.post('http://localhost:4000/render-pdf', {
+                const response = await axios.post('http://127.0.0.1:4000/render-pdf', {
                     html: fullHtml,
                     scanMode
                 }, {
@@ -693,15 +693,22 @@ DO NOT modify logic unless a clear gap is found.
 
         // CASE 1: SPLIT BILL MODE
         if (viewMode === 'BILL' && generatedData.mode === 'SPLIT') {
-            const facilityHtml = renderToStaticMarkup(<BillTemplate data={generatedData.facilityBill.bill_data} />);
-            const proHtml = renderToStaticMarkup(<BillTemplate data={generatedData.professionalBill.bill_data} />);
+            const facilityHtml = (modifiedHtml && modifiedHtml['FACILITY'])
+                ? modifiedHtml['FACILITY']
+                : renderToStaticMarkup(<BillTemplate data={generatedData.facilityBill.bill_data} />);
+
+            const proHtml = (modifiedHtml && modifiedHtml['PROFESSIONAL'])
+                ? modifiedHtml['PROFESSIONAL']
+                : renderToStaticMarkup(<BillTemplate data={generatedData.professionalBill.bill_data} />);
 
             if (splitDownloadMode === 'COMBINED') {
                 // COMBINED: Merge with page break
                 const combinedHtml = `
-                    ${facilityHtml}
-                    <div class="page-break"></div>
-                    ${proHtml}
+                    <div class="pdf-container">
+                        ${facilityHtml}
+                        <div class="page-break"></div>
+                        ${proHtml}
+                    </div>
                 `;
                 await downloadSinglePDF(combinedHtml, `${fileNameBase}-cmb.pdf`);
             } else {
@@ -729,8 +736,9 @@ DO NOT modify logic unless a clear gap is found.
         }
 
         let docHtml;
-        if (modifiedHtml && viewMode === 'BILL') {
-            docHtml = modifiedHtml; // Use edited HTML if active
+        const currentKey = viewMode === 'BILL' ? splitTab : viewMode;
+        if (modifiedHtml && modifiedHtml[currentKey]) {
+            docHtml = modifiedHtml[currentKey]; // Use edited HTML if active
         } else {
             docHtml = renderToStaticMarkup(template);
         }

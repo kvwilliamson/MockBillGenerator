@@ -8,7 +8,7 @@
         "start": "node server.js",
         "dev": "concurrently \"npm run server\" \"npm run client\"",
         "verify-pricing": "node tests/verify_pricing.js",
-        "server": "node --watch server.js",
+        "server": "node --watch --watch-exclude=Mock_Bills --watch-exclude=server.log --watch-exclude=CanonLog.txt server.js",
         "client": "cd client && npm run dev",
         "generate:classification": "node generate-classification-tests.mjs",
         "generate:error-detection": "node generate-error-detection-bills.mjs"

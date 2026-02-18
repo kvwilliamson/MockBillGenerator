@@ -2007,8 +2007,8 @@ app.post('/rerun-analysis', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`[MockGen] Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[MockGen] Server running on http://127.0.0.1:${PORT}`);
 });
 
 // Helper to safely parse AI JSON response

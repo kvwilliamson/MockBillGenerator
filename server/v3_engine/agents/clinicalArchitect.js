@@ -68,6 +68,9 @@ export async function generateClinicalArchitect(model, scenario, facility, siteO
         return {
             patient: { name: "John Doe", dob: "1980-01-01", gender: "M" },
             encounter: {
+                date_of_service: new Date().toISOString().split('T')[0],
+                admission_date: new Date().toISOString().split('T')[0],
+                discharge_date: new Date().toISOString().split('T')[0],
                 chief_complaint: "General Pain",
                 hpi: "Patient reports pain.",
                 exam_notes: "Vitals stable.",
